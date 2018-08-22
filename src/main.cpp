@@ -384,40 +384,92 @@ class Visualizer : public RFModule
     }
 
     /****************************************************************/
-    Vector  getBottle(Bottle &estimated_superq)
+    vector<Vector>  getBottle(Bottle &estimated_superq)
     {
         Vector superq_aux(12,0.0);
+        vector<Vector> superqs;
+
         Bottle *all=estimated_superq.get(0).asList();
 
-        for (size_t i=0; i<all->size(); i++)
+        yDebug()<<"Received signal "<<estimated_superq.toString();
+        yDebug()<<"Received signal "<<all->size();
+
+        if (all->size() == 4)
         {
-            Bottle *group=all->get(i).asList();
-            if (group->get(0).asString() == "dimensions")
+            for (size_t i=0; i<all->size(); i++)
             {
-                Bottle *dim=group->get(1).asList();
+                Bottle *group=all->get(i).asList();
+                if (group->get(0).asString() == "dimensions")
+                {
+                    Bottle *dim=group->get(1).asList();
 
-                superq_aux[0]=dim->get(0).asDouble(); superq_aux[1]=dim->get(1).asDouble(); superq_aux[2]=dim->get(2).asDouble();
+                    superq_aux[0]=dim->get(0).asDouble(); superq_aux[1]=dim->get(1).asDouble(); superq_aux[2]=dim->get(2).asDouble();
+                }
+                else if (group->get(0).asString() == "exponents")
+                {
+                    Bottle *dim=group->get(1).asList();
+
+                    superq_aux[3]=dim->get(0).asDouble(); superq_aux[4]=dim->get(1).asDouble();
+                }
+                else if (group->get(0).asString() == "center")
+                {
+                    Bottle *dim=group->get(1).asList();
+
+                    superq_aux[5]=dim->get(0).asDouble(); superq_aux[6]=dim->get(1).asDouble(); superq_aux[7]=dim->get(2).asDouble();
+                }
+                else if (group->get(0).asString() == "orientation")
+                {
+                    Bottle *dim=group->get(1).asList();
+
+                    superq_aux[8]=dim->get(0).asDouble(); superq_aux[9]=dim->get(1).asDouble(); superq_aux[10]=dim->get(2).asDouble(); superq_aux[11]=dim->get(3).asDouble();
+                }
             }
-            else if (group->get(0).asString() == "exponents")
-            {
-                Bottle *dim=group->get(1).asList();
+            superqs.push_back(superq_aux);
+        }
+        else
+        {
+            int size=all->size()/4;
 
-                superq_aux[3]=dim->get(0).asDouble(); superq_aux[4]=dim->get(1).asDouble();
-            }
-            else if (group->get(0).asString() == "center")
+            for (size_t i=1; i<=size; i++)
             {
-                Bottle *dim=group->get(1).asList();
+                stringstream ss;
+                ss<<i;
+                string i_str=ss.str();
 
-                superq_aux[5]=dim->get(0).asDouble(); superq_aux[6]=dim->get(1).asDouble(); superq_aux[7]=dim->get(2).asDouble();
-            }
-            else if (group->get(0).asString() == "orientation")
-            {
-                Bottle *dim=group->get(1).asList();
+                for (size_t i=0; i<all->size(); i++)
+                {
+                    Bottle *group=all->get(i).asList();
+                    if (group->get(0).asString() == "dimensions_"+i_str)
+                    {
+                        Bottle *dim=group->get(1).asList();
 
-                superq_aux[8]=dim->get(0).asDouble(); superq_aux[9]=dim->get(1).asDouble(); superq_aux[10]=dim->get(2).asDouble(); superq_aux[11]=dim->get(3).asDouble();
+                        superq_aux[0]=dim->get(0).asDouble(); superq_aux[1]=dim->get(1).asDouble(); superq_aux[2]=dim->get(2).asDouble();
+                    }
+                    if (group->get(0).asString() == "exponent_"+i_str)
+                    {
+                        Bottle *dim=group->get(1).asList();
+
+                        superq_aux[3]=dim->get(0).asDouble(); superq_aux[4]=dim->get(1).asDouble();
+                    }
+                    if (group->get(0).asString() == "center_"+i_str)
+                    {
+                        Bottle *dim=group->get(1).asList();
+
+                        superq_aux[5]=dim->get(0).asDouble(); superq_aux[6]=dim->get(1).asDouble(); superq_aux[7]=dim->get(2).asDouble();
+                    }
+                    if (group->get(0).asString() == "orientation_"+i_str)
+                    {
+                        Bottle *dim=group->get(1).asList();
+
+                        superq_aux[8]=dim->get(0).asDouble(); superq_aux[9]=dim->get(1).asDouble(); superq_aux[10]=dim->get(2).asDouble(); superq_aux[11]=dim->get(3).asDouble();
+                    }
+                }
+
+                superqs.push_back(superq_aux);
             }
         }
-        return superq_aux;
+
+        return superqs;
     }
 
     /****************************************************************/
@@ -550,59 +602,94 @@ class Visualizer : public RFModule
 
             superqRpc.write(cmd, superq_b);
 
-            Vector v, r;
+            Vector r;
+            vector<Vector> v;
             v = getBottle(superq_b);
-            r.resize(12,0.0);
-            Vector orient = dcm2euler(axis2dcm(v.subVector(8,11)));
 
-            r.setSubvector(0, v.subVector(5,7));
-            r.setSubvector(3, v.subVector(8,11));
-            r.setSubvector(7, v.subVector(0,2));
-            r.setSubvector(10, v.subVector(3,4));
+            vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
+            vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
+            vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
+            vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
 
-            yInfo()<<"Read superquadric: "<<r.toString();
-            vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(r));
+            vtk_renderWindow->SetSize(600,600);
+            vtk_renderWindow->AddRenderer(vtk_renderer);
+
+            vtk_renderer->AddActor(vtk_all_points->get_actor());
+            vtk_renderer->AddActor(vtk_out_points->get_actor());
+            if (dwn_points.size()!=in_points.size())
+                vtk_renderer->AddActor(vtk_dwn_points->get_actor());
+
+            vtk_renderer->SetBackground(backgroundColor.data());
+
+            vtk_axes=vtkSmartPointer<vtkAxesActor>::New();
+            vtk_widget=vtkSmartPointer<vtkOrientationMarkerWidget>::New();
+            vtk_widget->SetOutlineColor(0.9300,0.5700,0.1300);
+            vtk_widget->SetOrientationMarker(vtk_axes);
+            vtk_widget->SetInteractor(vtk_renderWindowInteractor);
+            vtk_widget->SetViewport(0.0,0.0,0.2,0.2);
+            vtk_widget->SetEnabled(1);
+            vtk_widget->InteractiveOn();
+
+            vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
+            vtk_style->SetCurrentStyleToTrackballCamera();
+            vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);
+
+
+            for (size_t i=0; i< v.size(); i++)
+            {
+                r.resize(12,0.0);
+                //Vector orient = dcm2euler(axis2dcm(v.subVector(8,11)));
+
+                r.setSubvector(0, v[i].subVector(5,7));
+                r.setSubvector(3, v[i].subVector(8,11));
+                r.setSubvector(7, v[i].subVector(0,2));
+                r.setSubvector(10, v[i].subVector(3,4));
+
+                yInfo()<<"Read superquadric: "<<r.toString();
+                vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(r));
+
+
+                //vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
+                //vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
+                //vtk_renderWindow->SetSize(600,600);
+                //vtk_renderWindow->AddRenderer(vtk_renderer);
+                //vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
+                //vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
+
+                // vtk_renderer->AddActor(vtk_all_points->get_actor());
+                //vtk_renderer->AddActor(vtk_out_points->get_actor());
+                //if (dwn_points.size()!=in_points.size())
+                //    vtk_renderer->AddActor(vtk_dwn_points->get_actor());
+                vtk_renderer->AddActor(vtk_superquadric->get_actor());
+                //vtk_renderer->SetBackground(backgroundColor.data());
+
+                //vtk_axes=vtkSmartPointer<vtkAxesActor>::New();
+                //vtk_widget=vtkSmartPointer<vtkOrientationMarkerWidget>::New();
+                //vtk_widget->SetOutlineColor(0.9300,0.5700,0.1300);
+                //vtk_widget->SetOrientationMarker(vtk_axes);
+                //vtk_widget->SetInteractor(vtk_renderWindowInteractor);
+                //vtk_widget->SetViewport(0.0,0.0,0.2,0.2);
+                //vtk_widget->SetEnabled(1);
+                //vtk_widget->InteractiveOn();
+
+                vector<double> bounds(6),centroid(3);
+                vtk_all_points->get_polydata()->GetBounds(bounds.data());
+                for (size_t i=0; i<centroid.size(); i++)
+                    centroid[i]=0.5*(bounds[i<<1]+bounds[(i<<1)+1]);
+
+                vtk_camera=vtkSmartPointer<vtkCamera>::New();
+                vtk_camera->SetPosition(centroid[0]+1.0,centroid[1],centroid[2]+0.5);
+                vtk_camera->SetFocalPoint(centroid.data());
+                vtk_camera->SetViewUp(0.0,0.0,1.0);
+                vtk_renderer->SetActiveCamera(vtk_camera);
+
+                //vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
+                //vtk_style->SetCurrentStyleToTrackballCamera();
+                //vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);
+
+            }
 
         }
-
-
-        vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
-        vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
-        vtk_renderWindow->SetSize(600,600);
-        vtk_renderWindow->AddRenderer(vtk_renderer);
-        vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
-        vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
-
-        vtk_renderer->AddActor(vtk_all_points->get_actor());
-        vtk_renderer->AddActor(vtk_out_points->get_actor());
-        if (dwn_points.size()!=in_points.size())
-            vtk_renderer->AddActor(vtk_dwn_points->get_actor());
-        vtk_renderer->AddActor(vtk_superquadric->get_actor());
-        vtk_renderer->SetBackground(backgroundColor.data());
-
-        vtk_axes=vtkSmartPointer<vtkAxesActor>::New();     
-        vtk_widget=vtkSmartPointer<vtkOrientationMarkerWidget>::New();
-        vtk_widget->SetOutlineColor(0.9300,0.5700,0.1300);
-        vtk_widget->SetOrientationMarker(vtk_axes);
-        vtk_widget->SetInteractor(vtk_renderWindowInteractor);
-        vtk_widget->SetViewport(0.0,0.0,0.2,0.2);
-        vtk_widget->SetEnabled(1);
-        vtk_widget->InteractiveOn();
-
-        vector<double> bounds(6),centroid(3);
-        vtk_all_points->get_polydata()->GetBounds(bounds.data());
-        for (size_t i=0; i<centroid.size(); i++)
-            centroid[i]=0.5*(bounds[i<<1]+bounds[(i<<1)+1]);
-
-        vtk_camera=vtkSmartPointer<vtkCamera>::New();
-        vtk_camera->SetPosition(centroid[0]+1.0,centroid[1],centroid[2]+0.5);
-        vtk_camera->SetFocalPoint(centroid.data());
-        vtk_camera->SetViewUp(0.0,0.0,1.0);
-        vtk_renderer->SetActiveCamera(vtk_camera);
-
-        vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
-        vtk_style->SetCurrentStyleToTrackballCamera();
-        vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);
 
         if (viewer_enabled)
         {
@@ -692,18 +779,22 @@ class Visualizer : public RFModule
                 cmd.addString("get_superq");
                 superqRpc.write(cmd, superq_b);
 
-                Vector v;
+                vector<Vector> v;
                 v = getBottle(superq_b);
-                r.resize(12,0.0);
-                Vector orient = dcm2euler(axis2dcm(v.subVector(8,11)));
+                for (size_t i=0; i< v.size(); i++)
+                {
+                    r.resize(12,0.0);
+                    //Vector orient = dcm2euler(axis2dcm(v.subVector(8,11)));
 
-                r.setSubvector(0, v.subVector(5,7));
-                r.setSubvector(3, v.subVector(8,11));
-                r.setSubvector(7, v.subVector(0,2));
-                r.setSubvector(10, v.subVector(3,4));
+                    r.setSubvector(0, v[i].subVector(5,7));
+                    r.setSubvector(3, v[i].subVector(8,11));
+                    r.setSubvector(7, v[i].subVector(0,2));
+                    r.setSubvector(10, v[i].subVector(3,4));
 
-                yInfo()<<"Read superquadric: "<<r.toString();
-                vtk_superquadric->set_parameters(r);
+                    // TO FIX
+                    yInfo()<<"Read superquadric: "<<r.toString();
+                    vtk_superquadric->set_parameters(r);
+                }
 
             }
 
