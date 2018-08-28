@@ -47,6 +47,10 @@
 #include <vtkVertexGlyphFilter.h>
 #include <vtkCamera.h>
 #include <vtkInteractorStyleSwitch.h>
+#include <vtkMatrix4x4.h>
+#include <vtkCaptionActor2D.h>
+#include <vtkTextActor.h>
+#include <vtkTextProperty.h>
 
 
 using namespace std;
@@ -266,49 +270,33 @@ public:
     vtkSmartPointer<vtkAxesActor> pose_vtk_actor;
     vtkSmartPointer<vtkCaptionActor2D> pose_vtk_caption_actor;
     vtkSmartPointer<vtkTransform> pose_vtk_transform;
-    yarp::sig::Matrix pose_transform;
-    yarp::sig::Matrix pose_rotation;
-    yarp::sig::Vector pose_translation;
-    yarp::sig::Vector pose_ax_size;
-    yarp::sig::Vector pose_cost_function;
+    yarp::sig::Matrix pose;
+
 
     /****************************************************************/
-    GraspPose::GraspPose() : pose_cost_function(2), pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
+    GraspPose() :  pose(4,4)
     {
-        pose_cost_function.zero();
-        pose_transform.eye();
-        pose_rotation.eye();
-        pose_translation.zero();
-        pose_ax_size.zero();
+        pose.eye();
         pose_vtk_actor = vtkSmartPointer<vtkAxesActor>::New();
         pose_vtk_transform = vtkSmartPointer<vtkTransform>::New();
         pose_vtk_caption_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
     }
 
     /****************************************************************/
-    bool GraspPose::setHomogeneousTransform(const Matrix &rotation, const Vector &translation)
+    void setvtkTransform(const Vector &pose_vect)
     {
-        //  set the 4x4 homogeneous transform given 3x3 rotation and 1x3 translation
-        if (rotation.cols() == 3 && rotation.rows() == 3 && translation.size() == 3)
-        {
-            pose_transform.setSubmatrix(rotation, 0, 0);
-            pose_transform.setSubcol(translation, 0, 3);
-            return true;
-        }
-        else
-            return false;
-    }
+        pose=euler2dcm(pose_vect.subVector(3,5));
+        pose.setSubcol(pose_vect.subVector(0,2), 0,3);
 
-    /****************************************************************/
-    void GraspPose::setvtkTransform(const Matrix &transform)
-    {
+        yDebug()<<"pose "<<pose.toString();
+
         vtkSmartPointer<vtkMatrix4x4> m_vtk = vtkSmartPointer<vtkMatrix4x4>::New();
         m_vtk->Zero();
         for (size_t i = 0; i < 4; i++)
         {
             for(size_t j = 0; j < 4; j++)
             {
-                m_vtk->SetElement(i, j, transform(i, j));
+                m_vtk->SetElement(i, j, pose(i, j));
             }
         }
 
@@ -316,7 +304,7 @@ public:
     }
 
     /****************************************************************/
-    void GraspPose::setvtkActorCaption(const string &caption)
+    void setvtkActorCaption(const string &caption)
     {
         pose_vtk_caption_actor->GetTextActor()->SetTextScaleModeToNone();
         pose_vtk_caption_actor->SetCaption(caption.c_str());
@@ -328,7 +316,7 @@ public:
         pose_vtk_caption_actor->GetCaptionTextProperty()->ShadowOff();
         pose_vtk_caption_actor->GetCaptionTextProperty()->BoldOff();
         pose_vtk_caption_actor->GetCaptionTextProperty()->ItalicOff();
-        pose_vtk_caption_actor->SetAttachmentPoint(pose_translation(0), pose_translation(1), pose_translation(2));
+        pose_vtk_caption_actor->SetAttachmentPoint(pose(0,3), pose(1,3), pose(2,3));
     }
 
 };
@@ -549,16 +537,20 @@ class Visualizer : public RFModule
     }
 
     /****************************************************************/
-    Vector  getPose(Bottle &pose_bottle)
+    vector<Vector>  getPose(Bottle &pose_bottle, const string &tag)
     {
-        Vector pose(7,0.0);
+        vector<Vector> poses;
 
         Bottle *all=pose_bottle.get(0).asList();
 
+
         for (size_t i=0; i<all->size(); i++)
         {
+            Vector pose(6,0.0);
+
             Bottle *group=all->get(i).asList();
-            if (group->get(0).asString() == "pose_"+hand_for_computation)
+
+            if (group->get(0).asString() == tag+"_"+hand_for_computation)
             {
                 Bottle *dim=group->get(1).asList();
 
@@ -567,9 +559,12 @@ class Visualizer : public RFModule
                     pose[l]=dim->get(l).asDouble();
                 }
             }
+
+            if (norm(pose) > 0.0)
+                poses.push_back(pose);
         }
 
-        return pose;
+        return poses;
     }
 
     /****************************************************************/
@@ -642,12 +637,14 @@ class Visualizer : public RFModule
             }
         }
 
-        if (get_grasping_pose)
+        yDebug()<<"rf.check(get_grasping_pose) "<<rf.check("get_grasping_pose");
+
+        if (rf.check("get_grasping_pose"))
         {
-            graspRpc.open("/test-superquadric/rpc:i");
-            if (!Network::connect(superqRpc.getName(),"/superquadric-model/rpc"))
+            graspRpc.open("/test-grasp/rpc:i");
+            if (!Network::connect(graspRpc.getName(),"/superquadric-grasp/rpc"))
             {
-                yError()<<"Unable to connect to superquadric-model rpc ";
+                yError()<<"Unable to connect to superquadric-grasp rpc ";
                 close();
                 return false;
             }
@@ -717,31 +714,39 @@ class Visualizer : public RFModule
             vector<Vector> v;
             v = getBottle(superq_b);
 
-            if (get_grasping_pose)
+            vector<Vector> poses, hands;
+
+            if (rf.check("get_grasping_pose"))
             {
+                hand_for_computation=rf.check("hand", Value("right")).asString();
                 cmd.clear();
                 cmd.addString("get_grasping_pose");
 
-                Bottle &b1=cmd.addList();
-                Bottle &b2=b1.addList();
-                b2.addString("dimensions");
-                Bottle &b2l=b2.addList();
-                b2l.addDouble(v[0]); b2l.addDouble(v[1]); b2l.addDouble(v[2]);
+                for (size_t l=0; l<v.size(); l++)
+                {
+                    Vector sup(12,0.0);
+                    sup=v[l];
+                    Bottle &b1=cmd.addList();
+                    Bottle &b2=b1.addList();
+                    b2.addString("dimensions");
+                    Bottle &b2l=b2.addList();
+                    b2l.addDouble(sup[0]); b2l.addDouble(sup[1]); b2l.addDouble(sup[2]);
 
-                Bottle &b3=b1.addList();
-                b3.addString("exponents");
-                Bottle &b3l=b3.addList();
-                b3l.addDouble(v[3]); b3l.addDouble(v[4]);
+                    Bottle &b3=b1.addList();
+                    b3.addString("exponents");
+                    Bottle &b3l=b3.addList();
+                    b3l.addDouble(sup[3]); b3l.addDouble(sup[4]);
 
-                Bottle &b4=b1.addList();
-                b4.addString("center");
-                Bottle &b4l=b4.addList();
-                b4l.addDouble(v[5]); b4l.addDouble(v[6]); b4l.addDouble(v[7]);
+                    Bottle &b4=b1.addList();
+                    b4.addString("center");
+                    Bottle &b4l=b4.addList();
+                    b4l.addDouble(sup[5]); b4l.addDouble(sup[6]); b4l.addDouble(sup[7]);
 
-                Bottle &b5=b1.addList();
-                b5.addString("orientation");
-                Bottle &b5l=b5.addList();
-                b5l.addDouble(v[8]); b5l.addDouble(v[9]); b5l.addDouble(v[10]); b5l.addDouble(v[11]);
+                    Bottle &b5=b1.addList();
+                    b5.addString("orientation");
+                    Bottle &b5l=b5.addList();
+                    b5l.addDouble(sup[8]); b5l.addDouble(sup[9]); b5l.addDouble(sup[10]); b5l.addDouble(sup[11]);
+                }
 
                 cmd.addString(hand_for_computation);
 
@@ -751,7 +756,8 @@ class Visualizer : public RFModule
 
                 yInfo()<<"Received solution: "<<reply.toString();
 
-                pose = getPose(reply);
+                poses=getPose(reply, "pose");
+                hands=getPose(reply, "solution");
             }
 
             vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
@@ -813,6 +819,64 @@ class Visualizer : public RFModule
                 vtk_camera->SetFocalPoint(centroid.data());
                 vtk_camera->SetViewUp(0.0,0.0,1.0);
                 vtk_renderer->SetActiveCamera(vtk_camera);
+            }
+
+            yDebug()<<"poses "<<poses.size();
+
+            for (size_t i=0; i< poses.size();i++)
+            {
+                vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
+                vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
+                ax_actor->VisibilityOff();
+                cap_actor->VisibilityOff();
+                pose_actors.push_back(ax_actor);
+                pose_captions.push_back(cap_actor);
+                vtk_renderer->AddActor(pose_actors[i]);
+                vtk_renderer->AddActor(pose_captions[i]);
+
+                shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
+
+                candidate_pose->setvtkTransform(poses[i]);
+                candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
+                pose_actors[i]->SetUserTransform(candidate_pose->pose_vtk_transform);
+
+                candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[i]);
+                pose_actors[i]->AxisLabelsOff();
+                pose_actors[i]->SetTotalLength(0.02, 0.02, 0.02);
+                pose_actors[i]->VisibilityOn();
+
+                pose_captions[i]->VisibilityOn();
+                pose_captions[i]->GetTextActor()->SetTextScaleModeToNone();
+
+                stringstream ss;
+                ss<<"pose_"<<i<<"_"<<hand_for_computation;
+                candidate_pose->setvtkActorCaption(ss.str());
+                pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
+                pose_captions[i]->BorderOff();
+                pose_captions[i]->LeaderOn();
+                pose_captions[i]->GetCaptionTextProperty()->SetFontSize(15);
+                pose_captions[i]->GetCaptionTextProperty()->FrameOff();
+                pose_captions[i]->GetCaptionTextProperty()->ShadowOff();
+                pose_captions[i]->GetCaptionTextProperty()->BoldOff();
+                pose_captions[i]->GetCaptionTextProperty()->ItalicOff();
+                pose_captions[i]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
+                pose_captions[i]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
+
+                yDebug()<<"hands "<<hands[i].toString();
+                Vector pose_hand(12,0.0);
+                pose_hand.setSubvector(0,hands[i].subVector(0,2));
+                pose_hand.setSubvector(3, dcm2axis(euler2dcm(hands[i].subVector(3,5))));
+                // Hand dimensions
+                pose_hand[7]=0.03;
+                pose_hand[8]=0.06;
+                pose_hand[9]=0.03;
+                pose_hand[10]=pose_hand[11]=1.0;
+
+                vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(pose_hand));
+
+                vtk_renderer->AddActor(vtk_superquadric->get_actor());
+
+                pose_candidates.push_back(candidate_pose);
             }
 
         }
