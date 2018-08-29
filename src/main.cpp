@@ -288,8 +288,6 @@ public:
         pose=euler2dcm(pose_vect.subVector(3,5));
         pose.setSubcol(pose_vect.subVector(0,2), 0,3);
 
-        yDebug()<<"pose "<<pose.toString();
-
         vtkSmartPointer<vtkMatrix4x4> m_vtk = vtkSmartPointer<vtkMatrix4x4>::New();
         m_vtk->Zero();
         for (size_t i = 0; i < 4; i++)
@@ -455,9 +453,6 @@ class Visualizer : public RFModule
 
         Bottle *all=estimated_superq.get(0).asList();
 
-        yDebug()<<"Received signal "<<estimated_superq.toString();
-        yDebug()<<"Received signal "<<all->size();
-
         if (all->size() == 4)
         {
             for (size_t i=0; i<all->size(); i++)
@@ -570,6 +565,37 @@ class Visualizer : public RFModule
         }
 
         return poses;
+    }
+
+    /****************************************************************/
+    vector<double>  getCost(Bottle &cost_bottle, const string &tag)
+    {
+        vector<double> costs;
+
+        Bottle *all=cost_bottle.get(0).asList();
+
+        for (size_t i=0; i<all->size(); i++)
+        {
+            double c=0.0;
+
+            Bottle *group=all->get(i).asList();
+
+            stringstream ss;
+            ss<<i % 3;
+
+            if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand_for_computation)
+            {
+                c=group->get(1).asDouble();
+            }
+
+            if (c > 0.0)
+            {
+                costs.push_back(c);
+            }
+
+        }
+
+        return costs;
     }
 
     /****************************************************************/
@@ -721,8 +747,6 @@ class Visualizer : public RFModule
             }
         }
 
-        yDebug()<<"rf.check(get_grasping_pose) "<<rf.check("get_grasping_pose");
-
         if (rf.check("get_grasping_pose"))
         {
             graspRpc.open("/test-grasp/rpc:i");
@@ -798,8 +822,7 @@ class Visualizer : public RFModule
             vector<Vector> v=getBottle(superq_b);
 
             vector<Vector> poses, hands;
-
-            yDebug()<<"v size "<<v.size();
+            vector<double> costs;
 
             if (rf.check("get_grasping_pose"))
             {
@@ -830,6 +853,7 @@ class Visualizer : public RFModule
 
                     poses=getPose(reply, "pose");
                     hands=getPose(reply, "solution");
+                    costs=getCost(reply, "cost");
                 }
             }
 
@@ -877,7 +901,6 @@ class Visualizer : public RFModule
                 r.setSubvector(7, v[i].subVector(0,2));
                 r.setSubvector(10, v[i].subVector(3,4));
 
-                yInfo()<<"Read superquadric: "<<r.toString();
                 vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(r));
 
                 vtk_renderer->AddActor(vtk_superquadric->get_actor());
@@ -896,6 +919,7 @@ class Visualizer : public RFModule
 
             for (size_t i=0; i< poses.size();i++)
             {
+
                 vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
                 vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
                 ax_actor->VisibilityOff();
@@ -922,7 +946,7 @@ class Visualizer : public RFModule
 
 
                 stringstream ss;
-                ss<<"pose_"<<i<<"_"<<hand_for_computation;
+                ss<<"pose_"<<i<<"_"<<hand_for_computation<<"/ cost :"<<costs[i];
                 candidate_pose->setvtkActorCaption(ss.str());
                 pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
                 pose_captions[i]->BorderOff();
