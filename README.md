@@ -1,4 +1,4 @@
-# superq-and-grasps-visualizer
+# superq-and-grasp-visualizer
 Read or receive the object point cloud and visualize the superquadrics estimated by `superquadric-model` and the grasping poses computed by `superquadric-grasp` using VTK. Thus, the module manages the visualization and queries the modules for computing the object model and the grasping poses.
 
 ### Dependencies
