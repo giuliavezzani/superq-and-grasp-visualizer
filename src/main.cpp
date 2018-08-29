@@ -106,7 +106,6 @@ public:
     }
 };
 
-
 /****************************************************************/
 class Object
 {
@@ -121,7 +120,6 @@ public:
         return vtk_actor;
     }
 };
-
 
 /****************************************************************/
 class Points : public Object
@@ -239,7 +237,6 @@ public:
         vtk_transform=vtkSmartPointer<vtkTransform>::New();
         vtk_transform->Translate(r.subVector(0,2).data());       
         vtk_transform->RotateWXYZ((180.0/M_PI)*r[6],r.subVector(3,5).data());
-        //vtk_transform->RotateZ(r[3]);
         vtk_actor->SetUserTransform(vtk_transform);
     }
 
@@ -259,10 +256,10 @@ public:
         vtk_transform->Identity();
         vtk_transform->Translate(r.subVector(0,2).data());
         vtk_transform->RotateWXYZ((180.0/M_PI)*r[6],r.subVector(3,5).data());
-        //vtk_transform->RotateZ(r[3]);
     }
 };
 
+/****************************************************************/
 class GraspPose : public Object
 {
 public:
@@ -308,7 +305,6 @@ public:
         pose_vtk_caption_actor->SetCaption(caption.c_str());
         pose_vtk_caption_actor->BorderOff();
         pose_vtk_caption_actor->LeaderOn();
-        //pose_vtk_caption_actor->GetCaptionTextProperty()->SetColor(color.data());
         pose_vtk_caption_actor->GetCaptionTextProperty()->SetFontSize(20);
         pose_vtk_caption_actor->GetCaptionTextProperty()->FrameOff();
         pose_vtk_caption_actor->GetCaptionTextProperty()->ShadowOff();
@@ -541,7 +537,7 @@ class Visualizer : public RFModule
         {
             Vector pose(6,0.0);
 
-            Bottle *group=all->get(i).asList();
+            Bottle *group=all->get(i).asList(); 
 
             for (size_t l=0; l<num_superq; l++)
             {
@@ -550,18 +546,12 @@ class Visualizer : public RFModule
 
                 if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand)
                 {
-                    Bottle *dim=group->get(1).asList();
-
-                    yDebug()<<"tag "<<tag+"_"+ss.str()+"_"+hand;
-
-                    yDebug()<<"dim "<<dim->toString();
+                    Bottle *dim=group->get(1).asList();                
 
                     for (size_t l=0; l<dim->size(); l++)
                     {
                         pose[l]=dim->get(l).asDouble();
                     }
-
-                    yDebug()<<"pose "<<pose.toString();
                 }
             }
             if (norm(pose) > 0.0)
@@ -574,11 +564,12 @@ class Visualizer : public RFModule
     /****************************************************************/
     void  getCost(Bottle &cost_bottle, const string &tag, const string &hand, vector<double> &costs)
     {
+        yDebug()<<"cost_bottle"<<cost_bottle.toString();
         Bottle *all=cost_bottle.get(0).asList();
 
         for (size_t i=0; i<all->size(); i++)
         {
-            double c=0.0;
+            double c=0.0;          
 
             Bottle *group=all->get(i).asList();
 
@@ -592,7 +583,7 @@ class Visualizer : public RFModule
                     c=group->get(1).asDouble();
                 }
             }
-            if (c > 0.0)
+            if (c >= 0.0)
             {
                 costs.push_back(c);
             }
@@ -665,7 +656,6 @@ class Visualizer : public RFModule
 
         for (size_t j=1; j<object.size(); j++)
         {
-
             Bottle &bb4=bb3.addList();
 
             for (size_t k=0; k<12; k++)
@@ -675,7 +665,6 @@ class Visualizer : public RFModule
         }
 
         cmd.addString(hand_for_computation);
-
     }
 
     /****************************************************************/
@@ -791,7 +780,6 @@ class Visualizer : public RFModule
         vtk_out_points->get_actor()->GetProperty()->SetColor(1.0,0.0,0.0);
         vtk_dwn_points->get_actor()->GetProperty()->SetColor(1.0,1.0,0.0);
 
-        Vector r(9,0.0);
 
         if (dwn_points.size()>0)
         {
@@ -816,7 +804,6 @@ class Visualizer : public RFModule
             cmd.clear();
             cmd.addString("get_superq");
 
-
             superqRpc.write(cmd, superq_b);
 
             Vector r;
@@ -833,59 +820,35 @@ class Visualizer : public RFModule
 
                 if (v.size()==1)
                 {
-                    askOnePose(v, cmd);
-
-                    yInfo()<<"Command asked "<<cmd.toString();
-
-                    graspRpc.write(cmd, reply);
-
-                    yInfo()<<"Received solution: "<<reply.toString();
-
-                    if (hand_for_computation!="both")
-                    {
-                        getPose(reply, "pose", hand_for_computation,poses);
-                        getPose(reply, "solution", hand_for_computation,  hands);
-                    }
-                    else
-                    {
-                        getPose(reply, "pose", "right",poses);
-                        getPose(reply, "solution", "right", hands);
-                        getPose(reply, "pose", "left", poses);
-                        getPose(reply, "solution", "left", hands);
-                    }
+                    askOnePose(v, cmd);           
                 }
                 else
                 {
                     askMultiplePose(v,cmd);
+                }
 
-                    yInfo()<<"Command asked "<<cmd.toString();
+                yInfo()<<"Command asked "<<cmd.toString();
 
-                    graspRpc.write(cmd, reply);
+                graspRpc.write(cmd, reply);
 
-                    yInfo()<<"Received solution: "<<reply.toString();
+                yInfo()<<"Received solution: "<<reply.toString();
 
-                    if (hand_for_computation!="both")
-                    {
-                        getPose(reply, "pose", hand_for_computation, poses);
-                        getPose(reply, "solution", hand_for_computation,  hands);
-                        getCost(reply, "cost", hand_for_computation, costs);
-                    }
-                    else
-                    {
-                        getPose(reply, "pose", "right",poses);
-                        getPose(reply, "solution", "right", hands);
-                        getCost(reply, "cost", "right", costs);
-                        getPose(reply, "pose", "left", poses);
-                        getPose(reply, "solution", "left", hands);
-                        getCost(reply, "cost", "left", costs);
-                    }
-
+                if (hand_for_computation!="both")
+                {
+                    getPose(reply, "pose", hand_for_computation, poses);
+                    getPose(reply, "solution", hand_for_computation,  hands);
+                    getCost(reply, "cost", hand_for_computation, costs);
+                }
+                else
+                {
+                    getPose(reply, "pose", "right",poses);
+                    getPose(reply, "solution", "right", hands);
+                    getCost(reply, "cost", "right", costs);
+                    getPose(reply, "pose", "left", poses);
+                    getPose(reply, "solution", "left", hands);
+                    getCost(reply, "cost", "left", costs);
                 }
             }
-
-            yDebug()<<"poses size "<<poses.size();
-            yDebug()<<"hands size "<<hands.size();
-            yDebug()<<"costs size "<<costs.size();
 
             vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
             vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
@@ -925,7 +888,6 @@ class Visualizer : public RFModule
             for (size_t i=0; i< v.size(); i++)
             {
                 r.resize(12,0.0);
-
                 r.setSubvector(0, v[i].subVector(5,7));
                 r.setSubvector(3, v[i].subVector(8,11));
                 r.setSubvector(7, v[i].subVector(0,2));
@@ -946,6 +908,10 @@ class Visualizer : public RFModule
                 vtk_camera->SetViewUp(0.0,0.0,1.0);
                 vtk_renderer->SetActiveCamera(vtk_camera);
             }
+
+            yDebug()<<"poses "<<poses.size();
+            yDebug()<<"hands "<<hands.size();
+            yDebug()<<"costs "<<costs.size();
 
             for (size_t i=0; i< poses.size();i++)
             {
@@ -976,13 +942,13 @@ class Visualizer : public RFModule
 
                 stringstream ss;
                 if (hand_for_computation!="both")
-                    ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost :"<<costs[i];
+                    ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost: "<<costs[i];
                 else
                 {
-                    if (i<2)
-                        ss<<"pose_"<<i%num_superq<<"_right / cost :"<<costs[i];
+                    if (i<poses.size()/2)
+                        ss<<"pose_"<<i%num_superq<<"_right / cost: "<<costs[i];
                     else
-                        ss<<"pose_"<<i%num_superq<<"_left / cost :"<<costs[i];
+                        ss<<"pose_"<<i%num_superq<<"_left / cost: "<<costs[i];
 
                 }
 
@@ -998,20 +964,21 @@ class Visualizer : public RFModule
                 pose_captions[i]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
                 pose_captions[i]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
 
-                yDebug()<<"hand size "<<hands.size();
-                yDebug()<<"hands "<<hands[i].toString();
-                Vector pose_hand(12,0.0);
-                pose_hand.setSubvector(0,hands[i].subVector(0,2));
-                pose_hand.setSubvector(3, dcm2axis(euler2dcm(hands[i].subVector(3,5))));
-                // Hand dimensions
-                pose_hand[7]=0.03;
-                pose_hand[8]=0.06;
-                pose_hand[9]=0.03;
-                pose_hand[10]=pose_hand[11]=1.0;
+                if (rf.check("visualize_hand"))
+                {
+                    Vector pose_hand(12,0.0);
+                    pose_hand.setSubvector(0,hands[i].subVector(0,2));
+                    pose_hand.setSubvector(3, dcm2axis(euler2dcm(hands[i].subVector(3,5))));
+                    // Hand dimensions
+                    pose_hand[7]=0.03;
+                    pose_hand[8]=0.06;
+                    pose_hand[9]=0.03;
+                    pose_hand[10]=pose_hand[11]=1.0;
 
-                vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(pose_hand));
+                    vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(pose_hand));
 
-                vtk_renderer->AddActor(vtk_superquadric->get_actor());
+                    vtk_renderer->AddActor(vtk_superquadric->get_actor());
+                }
 
                 pose_candidates.push_back(candidate_pose);
             }

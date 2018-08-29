@@ -3,7 +3,7 @@
 # Authors: Ugo Pattacini <ugo.pattacini@iit.it>
 
 cmake_minimum_required(VERSION 3.0.0)
-project(superq-visualizer)
+project(superq-and-grasp-visualizer)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 11)
