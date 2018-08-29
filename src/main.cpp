@@ -330,6 +330,7 @@ class Visualizer : public RFModule
     bool viewer_enabled;
     bool closing;
     string hand_for_computation;
+    int num_superq;
 
     class PointsProcessor : public PortReader {
         Visualizer *visualizer;
@@ -532,10 +533,8 @@ class Visualizer : public RFModule
     }
 
     /****************************************************************/
-    vector<Vector>  getPose(Bottle &pose_bottle, const string &tag)
+    void getPose(Bottle &pose_bottle, const string &tag, const string &hand, vector<Vector> &poses)
     {
-        vector<Vector> poses;
-
         Bottle *all=pose_bottle.get(0).asList();
 
         for (size_t i=0; i<all->size(); i++)
@@ -544,34 +543,37 @@ class Visualizer : public RFModule
 
             Bottle *group=all->get(i).asList();
 
-            stringstream ss;
-            ss<<i % 2;
-
-            if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand_for_computation)
+            for (size_t l=0; l<num_superq; l++)
             {
-                Bottle *dim=group->get(1).asList();
+                stringstream ss;
+                ss<<l;
 
-                for (size_t l=0; l<dim->size(); l++)
+                if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand)
                 {
-                    pose[l]=dim->get(l).asDouble();
+                    Bottle *dim=group->get(1).asList();
+
+                    yDebug()<<"tag "<<tag+"_"+ss.str()+"_"+hand;
+
+                    yDebug()<<"dim "<<dim->toString();
+
+                    for (size_t l=0; l<dim->size(); l++)
+                    {
+                        pose[l]=dim->get(l).asDouble();
+                    }
+
+                    yDebug()<<"pose "<<pose.toString();
                 }
             }
-
             if (norm(pose) > 0.0)
             {
                 poses.push_back(pose);
             }
-
         }
-
-        return poses;
     }
 
     /****************************************************************/
-    vector<double>  getCost(Bottle &cost_bottle, const string &tag)
+    void  getCost(Bottle &cost_bottle, const string &tag, const string &hand, vector<double> &costs)
     {
-        vector<double> costs;
-
         Bottle *all=cost_bottle.get(0).asList();
 
         for (size_t i=0; i<all->size(); i++)
@@ -580,22 +582,21 @@ class Visualizer : public RFModule
 
             Bottle *group=all->get(i).asList();
 
-            stringstream ss;
-            ss<<i % 3;
-
-            if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand_for_computation)
+            for (size_t l=0; l<num_superq; l++)
             {
-                c=group->get(1).asDouble();
-            }
+                stringstream ss;
+                ss<<l;
 
+                if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand)
+                {
+                    c=group->get(1).asDouble();
+                }
+            }
             if (c > 0.0)
             {
                 costs.push_back(c);
             }
-
         }
-
-        return costs;
     }
 
     /****************************************************************/
@@ -824,6 +825,8 @@ class Visualizer : public RFModule
             vector<Vector> poses, hands;
             vector<double> costs;
 
+            num_superq=v.size();
+
             if (rf.check("get_grasping_pose"))
             {
                 hand_for_computation=rf.check("hand", Value("right")).asString();
@@ -838,8 +841,18 @@ class Visualizer : public RFModule
 
                     yInfo()<<"Received solution: "<<reply.toString();
 
-                    poses=getPose(reply, "pose");
-                    hands=getPose(reply, "solution");
+                    if (hand_for_computation!="both")
+                    {
+                        getPose(reply, "pose", hand_for_computation,poses);
+                        getPose(reply, "solution", hand_for_computation,  hands);
+                    }
+                    else
+                    {
+                        getPose(reply, "pose", "right",poses);
+                        getPose(reply, "solution", "right", hands);
+                        getPose(reply, "pose", "left", poses);
+                        getPose(reply, "solution", "left", hands);
+                    }
                 }
                 else
                 {
@@ -851,11 +864,28 @@ class Visualizer : public RFModule
 
                     yInfo()<<"Received solution: "<<reply.toString();
 
-                    poses=getPose(reply, "pose");
-                    hands=getPose(reply, "solution");
-                    costs=getCost(reply, "cost");
+                    if (hand_for_computation!="both")
+                    {
+                        getPose(reply, "pose", hand_for_computation, poses);
+                        getPose(reply, "solution", hand_for_computation,  hands);
+                        getCost(reply, "cost", hand_for_computation, costs);
+                    }
+                    else
+                    {
+                        getPose(reply, "pose", "right",poses);
+                        getPose(reply, "solution", "right", hands);
+                        getCost(reply, "cost", "right", costs);
+                        getPose(reply, "pose", "left", poses);
+                        getPose(reply, "solution", "left", hands);
+                        getCost(reply, "cost", "left", costs);
+                    }
+
                 }
             }
+
+            yDebug()<<"poses size "<<poses.size();
+            yDebug()<<"hands size "<<hands.size();
+            yDebug()<<"costs size "<<costs.size();
 
             vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
             vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
@@ -919,7 +949,6 @@ class Visualizer : public RFModule
 
             for (size_t i=0; i< poses.size();i++)
             {
-
                 vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
                 vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
                 ax_actor->VisibilityOff();
@@ -946,7 +975,17 @@ class Visualizer : public RFModule
 
 
                 stringstream ss;
-                ss<<"pose_"<<i<<"_"<<hand_for_computation<<"/ cost :"<<costs[i];
+                if (hand_for_computation!="both")
+                    ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost :"<<costs[i];
+                else
+                {
+                    if (i<2)
+                        ss<<"pose_"<<i%num_superq<<"_right / cost :"<<costs[i];
+                    else
+                        ss<<"pose_"<<i%num_superq<<"_left / cost :"<<costs[i];
+
+                }
+
                 candidate_pose->setvtkActorCaption(ss.str());
                 pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
                 pose_captions[i]->BorderOff();
