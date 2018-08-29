@@ -1,5 +1,5 @@
-# superq-visualizer-giulia
-Read or receive the object point cloud and visualize the superquadrics estimated by `superquadric-model` using VTK.
+# superq-and-grasps-visualizer
+Read or receive the object point cloud and visualize the superquadrics estimated by `superquadric-model` and the grasping poses computed by `superquadric-grasp` using VTK. Thus, the module manages the visualization and queries the modules for computing the object model and the grasping poses.
 
 ### Dependencies
 - [Yarp](https://github.com/robotology/yarp)
@@ -29,6 +29,6 @@ If no `--file` option is passed through the command line, the module will open u
 
 ### Example
 ```
-$ superquadric-visualizer --remove-outliers "(0.01 10)" --random-sample 0.2 --file ./data/cylinder
+$ superqu-and-grasp-visualizer --remove-outliers "(0.01 10)" --random-sample 0.2 --file ./data/cylinder
 ```
 
