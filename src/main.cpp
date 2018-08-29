@@ -543,14 +543,16 @@ class Visualizer : public RFModule
 
         Bottle *all=pose_bottle.get(0).asList();
 
-
         for (size_t i=0; i<all->size(); i++)
         {
             Vector pose(6,0.0);
 
             Bottle *group=all->get(i).asList();
 
-            if (group->get(0).asString() == tag+"_"+hand_for_computation)
+            stringstream ss;
+            ss<<i % 2;
+
+            if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand_for_computation)
             {
                 Bottle *dim=group->get(1).asList();
 
@@ -561,10 +563,92 @@ class Visualizer : public RFModule
             }
 
             if (norm(pose) > 0.0)
+            {
                 poses.push_back(pose);
+            }
+
         }
 
         return poses;
+    }
+
+    /****************************************************************/
+    void askOnePose(vector<Vector> &object, Bottle &cmd)
+    {
+        cmd.clear();
+        cmd.addString("get_grasping_pose");
+
+        Vector sup(12,0.0);
+        sup=object[0];
+        Bottle &b1=cmd.addList();
+        Bottle &b2=b1.addList();
+        b2.addString("dimensions");
+        Bottle &b2l=b2.addList();
+        b2l.addDouble(sup[0]); b2l.addDouble(sup[1]); b2l.addDouble(sup[2]);
+
+        Bottle &b3=b1.addList();
+        b3.addString("exponents");
+        Bottle &b3l=b3.addList();
+        b3l.addDouble(sup[3]); b3l.addDouble(sup[4]);
+
+        Bottle &b4=b1.addList();
+        b4.addString("center");
+        Bottle &b4l=b4.addList();
+        b4l.addDouble(sup[5]); b4l.addDouble(sup[6]); b4l.addDouble(sup[7]);
+
+        Bottle &b5=b1.addList();
+        b5.addString("orientation");
+        Bottle &b5l=b5.addList();
+        b5l.addDouble(sup[8]); b5l.addDouble(sup[9]); b5l.addDouble(sup[10]); b5l.addDouble(sup[11]);
+
+        cmd.addString(hand_for_computation);
+    }
+
+    /****************************************************************/
+    void askMultiplePose(vector<Vector> &object, Bottle &cmd)
+    {
+        cmd.clear();
+        cmd.addString("get_grasping_pose_multiple");
+
+        Bottle &b1=cmd.addList();
+        Bottle &b2=b1.addList();
+        b2.addString("dimensions");
+        Bottle &b2l=b2.addList();
+        b2l.addDouble(object[0][0]); b2l.addDouble(object[0][1]); b2l.addDouble(object[0][2]);
+
+        Bottle &b3=b1.addList();
+        b3.addString("exponents");
+        Bottle &b3l=b3.addList();
+        b3l.addDouble(object[0][3]); b3l.addDouble(object[0][4]);
+
+        Bottle &b4=b1.addList();
+        b4.addString("center");
+        Bottle &b4l=b4.addList();
+        b4l.addDouble(object[0][5]); b4l.addDouble(object[0][6]); b4l.addDouble(object[0][7]);
+
+        Bottle &b5=b1.addList();
+        b5.addString("orientation");
+        Bottle &b5l=b5.addList();
+        b5l.addDouble(object[0][8]); b5l.addDouble(object[0][9]); b5l.addDouble(object[0][10]); b5l.addDouble(object[0][11]);
+
+        Bottle &bb1=cmd.addList();
+        Bottle &bb2=bb1.addList();
+        bb2.addString("obstacles");
+        Bottle &bb3=bb2.addList();
+
+        for (size_t j=1; j<object.size(); j++)
+        {
+
+            Bottle &bb4=bb3.addList();
+
+            for (size_t k=0; k<12; k++)
+            {
+                bb4.addDouble(object[j][k]);
+            }
+        }
+
+        cmd.addString(hand_for_computation);
+
     }
 
     /****************************************************************/
@@ -711,53 +795,42 @@ class Visualizer : public RFModule
             superqRpc.write(cmd, superq_b);
 
             Vector r;
-            vector<Vector> v;
-            v = getBottle(superq_b);
+            vector<Vector> v=getBottle(superq_b);
 
             vector<Vector> poses, hands;
+
+            yDebug()<<"v size "<<v.size();
 
             if (rf.check("get_grasping_pose"))
             {
                 hand_for_computation=rf.check("hand", Value("right")).asString();
-                cmd.clear();
-                cmd.addString("get_grasping_pose");
 
-                for (size_t l=0; l<v.size(); l++)
+                if (v.size()==1)
                 {
-                    Vector sup(12,0.0);
-                    sup=v[l];
-                    Bottle &b1=cmd.addList();
-                    Bottle &b2=b1.addList();
-                    b2.addString("dimensions");
-                    Bottle &b2l=b2.addList();
-                    b2l.addDouble(sup[0]); b2l.addDouble(sup[1]); b2l.addDouble(sup[2]);
+                    askOnePose(v, cmd);
 
-                    Bottle &b3=b1.addList();
-                    b3.addString("exponents");
-                    Bottle &b3l=b3.addList();
-                    b3l.addDouble(sup[3]); b3l.addDouble(sup[4]);
+                    yInfo()<<"Command asked "<<cmd.toString();
 
-                    Bottle &b4=b1.addList();
-                    b4.addString("center");
-                    Bottle &b4l=b4.addList();
-                    b4l.addDouble(sup[5]); b4l.addDouble(sup[6]); b4l.addDouble(sup[7]);
+                    graspRpc.write(cmd, reply);
 
-                    Bottle &b5=b1.addList();
-                    b5.addString("orientation");
-                    Bottle &b5l=b5.addList();
-                    b5l.addDouble(sup[8]); b5l.addDouble(sup[9]); b5l.addDouble(sup[10]); b5l.addDouble(sup[11]);
+                    yInfo()<<"Received solution: "<<reply.toString();
+
+                    poses=getPose(reply, "pose");
+                    hands=getPose(reply, "solution");
                 }
+                else
+                {
+                    askMultiplePose(v,cmd);
 
-                cmd.addString(hand_for_computation);
+                    yInfo()<<"Command asked "<<cmd.toString();
 
-                yInfo()<<"Command asked "<<cmd.toString();
+                    graspRpc.write(cmd, reply);
 
-                graspRpc.write(cmd, reply);
+                    yInfo()<<"Received solution: "<<reply.toString();
 
-                yInfo()<<"Received solution: "<<reply.toString();
-
-                poses=getPose(reply, "pose");
-                hands=getPose(reply, "solution");
+                    poses=getPose(reply, "pose");
+                    hands=getPose(reply, "solution");
+                }
             }
 
             vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
@@ -821,8 +894,6 @@ class Visualizer : public RFModule
                 vtk_renderer->SetActiveCamera(vtk_camera);
             }
 
-            yDebug()<<"poses "<<poses.size();
-
             for (size_t i=0; i< poses.size();i++)
             {
                 vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
@@ -848,6 +919,8 @@ class Visualizer : public RFModule
                 pose_captions[i]->VisibilityOn();
                 pose_captions[i]->GetTextActor()->SetTextScaleModeToNone();
 
+
+
                 stringstream ss;
                 ss<<"pose_"<<i<<"_"<<hand_for_computation;
                 candidate_pose->setvtkActorCaption(ss.str());
@@ -862,6 +935,7 @@ class Visualizer : public RFModule
                 pose_captions[i]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
                 pose_captions[i]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
 
+                yDebug()<<"hand size "<<hands.size();
                 yDebug()<<"hands "<<hands[i].toString();
                 Vector pose_hand(12,0.0);
                 pose_hand.setSubvector(0,hands[i].subVector(0,2));
