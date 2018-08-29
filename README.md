@@ -29,6 +29,6 @@ If no `--file` option is passed through the command line, the module will open u
 
 ### Example
 ```
-$ superqu-and-grasp-visualizer --remove-outliers "(0.01 10)" --random-sample 0.2 --file ./data/cylinder
+$ superq-and-grasp-visualizer --remove-outliers "(0.01 10)" --random-sample 0.2 --file ./data/cylinder
 ```
 
