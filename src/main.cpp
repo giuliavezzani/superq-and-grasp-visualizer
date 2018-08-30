@@ -564,12 +564,11 @@ class Visualizer : public RFModule
     /****************************************************************/
     void  getCost(Bottle &cost_bottle, const string &tag, const string &hand, vector<double> &costs)
     {
-        yDebug()<<"cost_bottle"<<cost_bottle.toString();
         Bottle *all=cost_bottle.get(0).asList();
 
         for (size_t i=0; i<all->size(); i++)
         {
-            double c=0.0;          
+            double c=-1.0;
 
             Bottle *group=all->get(i).asList();
 
@@ -909,10 +908,6 @@ class Visualizer : public RFModule
                 vtk_renderer->SetActiveCamera(vtk_camera);
             }
 
-            yDebug()<<"poses "<<poses.size();
-            yDebug()<<"hands "<<hands.size();
-            yDebug()<<"costs "<<costs.size();
-
             for (size_t i=0; i< poses.size();i++)
             {
                 vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
@@ -946,9 +941,9 @@ class Visualizer : public RFModule
                 else
                 {
                     if (i<poses.size()/2)
-                        ss<<"pose_"<<i%num_superq<<"_right / cost: "<<costs[i];
+                        ss<<"pose_"<<i%num_superq<<"_right / cost: "<<setprecision(3)<<costs[i];
                     else
-                        ss<<"pose_"<<i%num_superq<<"_left / cost: "<<costs[i];
+                        ss<<"pose_"<<i%num_superq<<"_left / cost: "<<setprecision(3)<<costs[i];
 
                 }
 
