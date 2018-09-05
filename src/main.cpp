@@ -20,6 +20,7 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <deque>
 
 #include <yarp/os/all.h>
 #include <yarp/sig/all.h>
@@ -327,6 +328,7 @@ class Visualizer : public RFModule
     bool closing;
     string hand_for_computation;
     int num_superq;
+    std::deque<std::string> names;
 
     class PointsProcessor : public PortReader {
         Visualizer *visualizer;
@@ -557,6 +559,9 @@ class Visualizer : public RFModule
             if (norm(pose) > 0.0)
             {
                 poses.push_back(pose);
+
+                if (tag=="pose")
+                    names.push_back(hand);
             }
         }
     }
@@ -582,7 +587,7 @@ class Visualizer : public RFModule
                     c=group->get(1).asDouble();
                 }
             }
-            if (c >= 0.0)
+            if (c > 0.0)
             {
                 costs.push_back(c);
             }
@@ -832,6 +837,8 @@ class Visualizer : public RFModule
 
                 yInfo()<<"Received solution: "<<reply.toString();
 
+                names.clear();
+
                 if (hand_for_computation!="both")
                 {
                     getPose(reply, "pose", hand_for_computation, poses);
@@ -908,8 +915,13 @@ class Visualizer : public RFModule
                 vtk_renderer->SetActiveCamera(vtk_camera);
             }
 
+
+
             for (size_t i=0; i< poses.size();i++)
             {
+                yDebug()<<"Pose "<<i<< " "<<poses[i].toString();
+                yDebug()<<"Cost "<<i<< " "<<costs[i];
+                yDebug()<<"Name "<<i<< " "<<names[i];
                 vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
                 vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
                 ax_actor->VisibilityOff();
@@ -940,11 +952,7 @@ class Visualizer : public RFModule
                     ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost: "<<costs[i];
                 else
                 {
-                    if (i<poses.size()/2)
-                        ss<<"pose_"<<i%num_superq<<"_right / cost: "<<setprecision(3)<<costs[i];
-                    else
-                        ss<<"pose_"<<i%num_superq<<"_left / cost: "<<setprecision(3)<<costs[i];
-
+                   ss<<"pose_"<<i%num_superq<<"_"+names[i]+" / cost: "<<setprecision(3)<<costs[i];
                 }
 
                 candidate_pose->setvtkActorCaption(ss.str());
