@@ -52,6 +52,7 @@
 #include <vtkCaptionActor2D.h>
 #include <vtkTextActor.h>
 #include <vtkTextProperty.h>
+#include <vtkPlaneSource.h>
 
 
 using namespace std;
@@ -186,6 +187,34 @@ public:
     {
         return vtk_polydata;
     }
+};
+
+/****************************************************************/
+class Plane : public Object
+{
+protected:
+    vtkSmartPointer<vtkPlaneSource> plane_source;
+    vtkSmartPointer<vtkPolyDataMapper> vtk_mapper;
+
+public:
+    /****************************************************************/
+    Plane(double z_height)
+    {
+        plane_source = vtkSmartPointer<vtkPlaneSource>::New();
+        plane_source->SetCenter(0.0, 0.0, z_height);
+        plane_source->SetNormal(0.0, 0.0, 1.0);
+        plane_source->Update();
+
+        vtkPolyData* plane = plane_source->GetOutput();
+
+        // Create a mapper and actor
+        vtk_mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+        vtk_mapper->SetInputData(plane);
+
+        vtk_actor = vtkSmartPointer<vtkActor>::New();
+        vtk_actor->SetMapper(vtk_mapper);
+    }
+
 };
 
 
@@ -348,11 +377,12 @@ class Visualizer : public RFModule
 
     RpcServer rpcPoints,rpcService;
 
-    vector<Vector> all_points,in_points,out_points,dwn_points;
+    vector<Vector> all_points,in_points,out_points,dwn_points, points_hand;
     vector<vector<unsigned char>> all_colors;
     
-    unique_ptr<Points> vtk_all_points,vtk_out_points,vtk_dwn_points;
+    unique_ptr<Points> vtk_all_points,vtk_out_points,vtk_dwn_points, vtk_points_hand;
     unique_ptr<Superquadric> vtk_superquadric;
+    unique_ptr<Plane> vtk_plane;
 
     vtkSmartPointer<vtkRenderer> vtk_renderer;
     vtkSmartPointer<vtkRenderWindow> vtk_renderWindow;
@@ -784,6 +814,8 @@ class Visualizer : public RFModule
         vtk_out_points->get_actor()->GetProperty()->SetColor(1.0,0.0,0.0);
         vtk_dwn_points->get_actor()->GetProperty()->SetColor(1.0,1.0,0.0);
 
+        vtk_plane=unique_ptr<Plane>(new Plane(-0.18));
+
 
         if (dwn_points.size()>0)
         {
@@ -815,6 +847,7 @@ class Visualizer : public RFModule
 
             vector<Vector> poses, hands;
             vector<double> costs;
+            vector<double> dims;
 
             num_superq=v.size();
 
@@ -844,15 +877,18 @@ class Visualizer : public RFModule
                     getPose(reply, "pose", hand_for_computation, poses);
                     getPose(reply, "solution", hand_for_computation,  hands);
                     getCost(reply, "cost", hand_for_computation, costs);
+                    getCost(reply, "hand_length", hand_for_computation, dims);
                 }
                 else
                 {
                     getPose(reply, "pose", "right",poses);
                     getPose(reply, "solution", "right", hands);
                     getCost(reply, "cost", "right", costs);
+                    getCost(reply, "hand_length", "right", dims);
                     getPose(reply, "pose", "left", poses);
                     getPose(reply, "solution", "left", hands);
                     getCost(reply, "cost", "left", costs);
+                    getCost(reply, "hand_length", "left", dims);
                 }
             }
 
@@ -915,7 +951,7 @@ class Visualizer : public RFModule
                 vtk_renderer->SetActiveCamera(vtk_camera);
             }
 
-
+            vtk_renderer->AddActor(vtk_plane->get_actor());
 
             for (size_t i=0; i< poses.size();i++)
             {
@@ -974,9 +1010,15 @@ class Visualizer : public RFModule
                     pose_hand.setSubvector(3, dcm2axis(euler2dcm(hands[i].subVector(3,5))));
                     // Hand dimensions
                     pose_hand[7]=0.03;
-                    pose_hand[8]=0.06;
+                    pose_hand[8]=dims[i];
                     pose_hand[9]=0.03;
                     pose_hand[10]=pose_hand[11]=1.0;
+
+                    samplePointsHand(pose_hand, points_hand, names[i]);
+
+                    vtk_points_hand=unique_ptr<Points>(new Points(points_hand,8));
+
+                    vtk_renderer->AddActor(vtk_points_hand->get_actor());
 
                     vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(pose_hand));
 
@@ -1143,6 +1185,82 @@ class Visualizer : public RFModule
         if (rpcService.asPort().isOpen())
             rpcService.close();
         return true;
+    }
+
+    /****************************************************************/
+    void samplePointsHand(Vector &hand, vector<Vector> &points, string &str_hand)
+    {
+        double se, ce, co, so;
+        double omega;
+
+        Vector point(3,0.0);
+
+        for(int i=0; i<(int)sqrt(48); i++)
+        {
+            for (double theta=0; theta<=2*M_PI; theta+=M_PI/((int)sqrt(48)))
+            {
+                if (str_hand=="right")
+                {
+                    omega=i*M_PI/sqrt(48);
+
+                    ce=cos(-theta - M_PI/4.0);
+                    se=sin(-theta - M_PI/4.0);
+                    co=cos(omega);
+                    so=sin(omega);
+
+                    point[0]=hand[7] * sign(ce)*(pow(abs(ce),hand[10])) * sign(co)*(pow(abs(co),hand[11]));
+                    point[1]=hand[8] * sign(se)*(pow(abs(se),hand[10]));
+                    point[2]=hand[9] * sign(ce)*(pow(abs(ce),hand[10])) * sign(so)*(pow(abs(so),hand[11]));
+                }
+                else
+                {
+                    omega=i*M_PI/sqrt(48);
+
+                    ce=cos(-theta + 1.0/4.0*M_PI + M_PI);
+                    se=sin(-theta + 1.0/4.0*M_PI+ M_PI);
+
+                    co=cos(omega);
+                    so=sin(omega);
+
+                    point[0]=hand[7] * sign(ce)*(pow(abs(ce),hand[10])) * sign(co)*(pow(abs(co),hand[11]));
+                    point[1]=hand[8] * sign(se)*(pow(abs(se),hand[10]));
+                    point[2]=hand[9] * sign(ce)*(pow(abs(ce),hand[10])) * sign(so)*(pow(abs(so),hand[11]));
+                }
+
+
+                Vector point_tr(4,0.0);
+
+                Matrix H_hand;
+
+                H_hand=axis2dcm(hand.subVector(3,6));
+                H_hand.setSubcol(hand.subVector(0,2), 0,3);
+
+
+
+                if (str_hand=="right")
+                {
+                    if ((point[0]< sqrt(2.0)/2.0 && point[2] < 0) || (point[2]< sqrt(2.0)/2.0 && point[0] < 0))
+                    {
+                        Vector point_tmp(4,1.0);
+                        point_tmp.setSubvector(0,point);
+                        point_tr=H_hand*point_tmp;
+                        point=point_tr.subVector(0,2);
+                        points.push_back(point);
+                    }
+                }
+                else
+                {
+                    if ((point[0]< sqrt(2.0)/2.0 && point[2] >0) || (point[2]>- sqrt(2.0)/2.0 && point[0] < 0))
+                    {
+                        Vector point_tmp(4,1.0);
+                        point_tmp.setSubvector(0,point);
+                        point_tr=H_hand*point_tmp;
+                        point=point_tr.subVector(0,2);
+                        points.push_back(point);
+                    }
+                }
+            }
+        }
     }
 
 public:
