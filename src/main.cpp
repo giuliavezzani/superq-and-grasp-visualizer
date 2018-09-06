@@ -953,8 +953,11 @@ class Visualizer : public RFModule
 
             vtk_renderer->AddActor(vtk_plane->get_actor());
 
+
             for (size_t i=0; i< poses.size();i++)
             {
+                points_hand.clear();
+
                 yDebug()<<"Pose "<<i<< " "<<poses[i].toString();
                 yDebug()<<"Cost "<<i<< " "<<costs[i];
                 yDebug()<<"Name "<<i<< " "<<names[i];
@@ -1195,16 +1198,16 @@ class Visualizer : public RFModule
 
         Vector point(3,0.0);
 
-        for(int i=0; i<(int)sqrt(48); i++)
+        for(int i=0; i<(int)sqrt(49); i++)
         {
-            for (double theta=0; theta<=2*M_PI; theta+=M_PI/((int)sqrt(48)))
+            for (double theta=0; theta<=2*M_PI; theta+=M_PI/((int)sqrt(49)))
             {
                 if (str_hand=="right")
                 {
-                    omega=i*M_PI/sqrt(48);
+                    omega=i*M_PI/sqrt(49);
 
-                    ce=cos(-theta - M_PI/4.0);
-                    se=sin(-theta - M_PI/4.0);
+                    ce=cos(theta);
+                    se=sin(theta);
                     co=cos(omega);
                     so=sin(omega);
 
@@ -1214,10 +1217,10 @@ class Visualizer : public RFModule
                 }
                 else
                 {
-                    omega=i*M_PI/sqrt(48);
+                    omega=i*M_PI/sqrt(49);
 
-                    ce=cos(-theta + 1.0/4.0*M_PI + M_PI);
-                    se=sin(-theta + 1.0/4.0*M_PI+ M_PI);
+                    ce=cos(theta);
+                    se=sin(theta);
 
                     co=cos(omega);
                     so=sin(omega);
@@ -1235,11 +1238,9 @@ class Visualizer : public RFModule
                 H_hand=axis2dcm(hand.subVector(3,6));
                 H_hand.setSubcol(hand.subVector(0,2), 0,3);
 
-
-
                 if (str_hand=="right")
                 {
-                    if ((point[0]< sqrt(2.0)/2.0 && point[2] < 0) || (point[2]< sqrt(2.0)/2.0 && point[0] < 0))
+                    if (point[0] + point[2] < 0)
                     {
                         Vector point_tmp(4,1.0);
                         point_tmp.setSubvector(0,point);
@@ -1250,7 +1251,7 @@ class Visualizer : public RFModule
                 }
                 else
                 {
-                    if ((point[0]< sqrt(2.0)/2.0 && point[2] >0) || (point[2]>- sqrt(2.0)/2.0 && point[0] < 0))
+                    if (point[0] - point[2] < 0)
                     {
                         Vector point_tmp(4,1.0);
                         point_tmp.setSubvector(0,point);
@@ -1261,6 +1262,8 @@ class Visualizer : public RFModule
                 }
             }
         }
+
+        yDebug()<<"points on hand "<<points.size();
     }
 
 public:
