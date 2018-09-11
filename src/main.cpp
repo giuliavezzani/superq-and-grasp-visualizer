@@ -987,7 +987,10 @@ class Visualizer : public RFModule
     bool computeAndVisualizeSuperqAndGrasp()
     {
         Bottle cmd, superq_b, reply;
-        cmd.addString("send_point_clouds");
+        //cmd.addString("send_point_clouds");
+
+        // Test
+        cmd.addString("get_superq");
 
         Bottle &in1=cmd.addList();
 
@@ -1002,10 +1005,10 @@ class Visualizer : public RFModule
             in.addDouble(dwn_points[i][5]);
         }
 
-        superqRpc.write(cmd, superq_b);
+        //superqRpc.write(cmd, superq_b);
 
-        cmd.clear();
-        cmd.addString("get_superq");
+        //cmd.clear();
+
 
         superqRpc.write(cmd, superq_b);
 
