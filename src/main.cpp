@@ -1095,6 +1095,9 @@ class Visualizer : public RFModule
             vtk_renderer->AddActor(vtk_plane->get_actor());
 
 
+        int j=findMinCost();
+
+
         for (size_t i=0; i< poses.size();i++)
         {
             points_hand.clear();
@@ -1125,8 +1128,6 @@ class Visualizer : public RFModule
             pose_captions[i]->VisibilityOn();
             pose_captions[i]->GetTextActor()->SetTextScaleModeToNone();
 
-
-
             stringstream ss;
             if (hand_for_computation!="both")
                 ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost: "<<costs[i];
@@ -1142,12 +1143,24 @@ class Visualizer : public RFModule
             pose_captions[i]->GetCaptionTextProperty()->SetFontSize(15);
             pose_captions[i]->GetCaptionTextProperty()->FrameOff();
             pose_captions[i]->GetCaptionTextProperty()->ShadowOff();
+
             pose_captions[i]->GetCaptionTextProperty()->BoldOff();
             pose_captions[i]->GetCaptionTextProperty()->ItalicOff();
             pose_captions[i]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
+
+            if (i==j)
+            {
+                yDebug()<<"i == j ";
+                pose_captions[i]->GetCaptionTextProperty()->BoldOn();
+                pose_captions[i]->GetCaptionTextProperty()->SetColor(0., 0.35, 0.0);
+                pose_captions[i]->GetCaptionTextProperty()->SetFontSize(20);
+            }
+
+
+
             pose_captions[i]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
 
-            if ("visualize_hand")
+            if (visualize_hand)
             {
                 Vector pose_hand(12,0.0);
                 pose_hand.setSubvector(0,hands[i].subVector(0,2));
@@ -1171,6 +1184,26 @@ class Visualizer : public RFModule
 
             pose_candidates.push_back(candidate_pose);
         }
+    }
+
+    /****************************************************************/
+    int findMinCost()
+    {
+        double min_cost= 1000.0;
+        int j=0;
+
+        for (size_t i=0; i<costs.size(); i++)
+        {
+            if (min_cost > costs[i])
+            {
+                min_cost=costs[i];
+                j=i;
+            }
+        }
+
+        yDebug()<<"Min cost "<<j;
+
+        return j;
     }
 
     /****************************************************************/
