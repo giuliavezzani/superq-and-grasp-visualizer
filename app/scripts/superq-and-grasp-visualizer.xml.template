@@ -1,0 +1,68 @@
+<application>
+    <name>Multiple Superquadric Visualizer</name>
+
+    <dependencies>
+        <port>/pointCloudRead/rpc</port>
+        <port>/actionsRenderingEngine/cmd:io</port>
+        <port>/actionsRenderingEngine/get:io</port>
+        <port>/SFM/rpc</port>
+        <port>/memory/rpc</port>
+        <port>/icub/camcalib/left/out</port>
+        <port>/lbpExtract/rpc:i</port>
+    </dependencies>
+
+    <module>
+        <name>superq-grasp-and-visualizer</name>
+		<parameters> --remove-outliers "(0.01 10)"</parameters>
+        <node>icub21</node>
+    </module>
+
+    <module>
+        <name>superquadric-model</name>
+	    <parameters> --from config-classes-fixed.ini</parameters>
+        <node>icub21</node>
+    </module>
+
+    <module>
+        <name>point-cloud-read</name>
+        <node>icub21</node>
+    </module>
+
+    <connection>
+        <from>/superq-and-grasp-visualizer/pointCloud:rpc</from>
+        <to>/pointCloudRead/rpc</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/superq-and-grasp-visualizer/actionRenderer:rpc</from>
+        <to>/actionsRenderingEngine/cmd:io</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+
+    <connection>
+      <from>/icub/camcalib/left/out</from>
+      <to>/pointCloudRead/imgL:i</to>
+      <protocol>udp</protocol>
+  </connection>
+
+  <connection>
+      <from>/pointCloudRead/OPCrpc</from>
+      <to>/memory/rpc</to>
+      <protocol>fast_tcp</protocol>
+  </connection>
+
+  <connection>
+      <from>/pointCloudRead/SFMrpc</from>
+      <to>/SFM/rpc</to>
+      <protocol>fast_tcp</protocol>
+  </connection>
+
+  <connection>
+      <from>/pointCloudRead/segmrpc</from>
+      <to>/lbpExtract/rpc:i</to>
+      <protocol>fast_tcp</protocol>
+  </connection>
+
+</application>

@@ -353,13 +353,18 @@ class Visualizer : public RFModule
     unsigned int uniform_sample;
     double random_sample;
     bool from_file;
+    bool get_grasping_pose;
+    bool visualize_hand;
     bool viewer_enabled;
     bool closing;
     string hand_for_computation;
     int num_superq;
     std::deque<std::string> names;
+    vector<Vector> poses, hands;
+    vector<double> costs;
+    vector<double> dims;
 
-    class PointsProcessor : public PortReader {
+    /*class PointsProcessor : public PortReader {
         Visualizer *visualizer;
         bool read(ConnectionReader &connection) override {
             PointCloud<DataXYZRGBA> points;
@@ -373,7 +378,7 @@ class Visualizer : public RFModule
         }
     public:
         PointsProcessor(Visualizer *visualizer_) : visualizer(visualizer_) { }
-    } pointsProcessor;
+    } pointsProcessor;*/
 
     RpcServer rpcPoints,rpcService;
 
@@ -393,11 +398,17 @@ class Visualizer : public RFModule
     vtkSmartPointer<vtkInteractorStyleSwitch> vtk_style;
     vtkSmartPointer<UpdateCommand> vtk_updateCallback;
 
-    BufferedPort<Bottle> oPort;
-    BufferedPort<Property> iPort;
+    //BufferedPort<Bottle> oPort;
+    //BufferedPort<Property> iPort;
 
     RpcClient superqRpc;
     RpcClient graspRpc;
+
+    // For looking at the object to be modeled
+    RpcClient action_render_rpc;
+
+    // For getting the point cloud
+    RpcClient point_cloud_rpc;
 
     /****************************************************************/
     void removeOutliers()
@@ -575,7 +586,6 @@ class Visualizer : public RFModule
             {
                 stringstream ss;
                 ss<<l;
-
                 if (group->get(0).asString() == tag+"_"+ss.str()+"_"+hand)
                 {
                     Bottle *dim=group->get(1).asList();                
@@ -586,6 +596,7 @@ class Visualizer : public RFModule
                     }
                 }
             }
+
             if (norm(pose) > 0.0)
             {
                 poses.push_back(pose);
@@ -594,6 +605,7 @@ class Visualizer : public RFModule
                     names.push_back(hand);
             }
         }
+
     }
 
     /****************************************************************/
@@ -707,6 +719,9 @@ class Visualizer : public RFModule
         Rand::init();
 
         from_file=rf.check("file");
+        get_grasping_pose=rf.check("get_grasping_pose");
+        visualize_hand=rf.check("visualize_hand");
+
         if (from_file)
         {
             string file=rf.find("file").asString();
@@ -739,20 +754,24 @@ class Visualizer : public RFModule
         }
         else
         {
-            rpcPoints.open("/superq-and-grasp-visualizer/points:rpc");
-            rpcPoints.setReader(pointsProcessor);
+            //rpcPoints.open("/superq-and-grasp-visualizer/points:rpc");
+            //rpcPoints.setReader(pointsProcessor);
 
             rpcService.open("/superq-and-grasp-visualizer/service:rpc");
             attach(rpcService);
+
+            action_render_rpc.open("/superq-and-grasp-visualizer/actionRenderer:rpc");
+            point_cloud_rpc.open("/superq-and-grasp-visualizer/pointCloud:rpc");
         }
 
-        oPort.open("/superquadric-visualizer:o");
-        iPort.open("/superquadric-visualizer:i");
+        //oPort.open("/superquadric-visualizer:o");
+        //iPort.open("/superquadric-visualizer:i");
 
 
-        if (rf.check("streaming_mode"))
+        /*if (rf.check("streaming_mode"))
         {
-            if (!Network::connect(oPort.getName(),"/superquadric-model/point:i") ||
+
+        if (!Network::connect(oPort.getName(),"/superquadric-model/point:i") ||
                 !Network::connect("/superquadric-model/superq:o",iPort.getName()))
             {
                 yError()<<"Unable to connect to superquadric-model";
@@ -761,7 +780,7 @@ class Visualizer : public RFModule
             }
         }
         else
-        {
+        {*/
             superqRpc.open("/superq-and-grasp-visualizer/rpc:i");
             if (!Network::connect(superqRpc.getName(),"/superquadric-model/rpc"))
             {
@@ -769,7 +788,7 @@ class Visualizer : public RFModule
                 close();
                 return false;
             }
-        }
+        //}
 
         if (rf.check("get_grasping_pose"))
         {
@@ -780,6 +799,8 @@ class Visualizer : public RFModule
                 close();
                 return false;
             }
+
+            hand_for_computation=rf.check("hand", Value("right")).asString();
         }
 
 
@@ -847,218 +868,7 @@ class Visualizer : public RFModule
 
         if (dwn_points.size()>0)
         {
-            Bottle cmd, superq_b, reply;
-            cmd.addString("send_point_clouds");
-
-            Bottle &in1=cmd.addList();
-
-            for (size_t i=0; i<dwn_points.size(); i++)
-            {
-                Bottle &in=in1.addList();
-                in.addDouble(dwn_points[i][0]);
-                in.addDouble(dwn_points[i][1]);
-                in.addDouble(dwn_points[i][2]);
-                in.addDouble(dwn_points[i][3]);
-                in.addDouble(dwn_points[i][4]);
-                in.addDouble(dwn_points[i][5]);
-            }
-
-            superqRpc.write(cmd, superq_b);
-
-            cmd.clear();
-            cmd.addString("get_superq");
-
-            superqRpc.write(cmd, superq_b);
-
-            Vector r;
-            vector<Vector> v=getBottle(superq_b);
-
-            vector<Vector> poses, hands;
-            vector<double> costs;
-            vector<double> dims;
-
-            num_superq=v.size();
-
-            if (rf.check("get_grasping_pose"))
-            {
-                hand_for_computation=rf.check("hand", Value("right")).asString();
-
-                if (v.size()==1)
-                {
-                    askOnePose(v, cmd);           
-                }
-                else
-                {
-                    askMultiplePose(v,cmd);
-                }
-
-                yInfo()<<"Command asked "<<cmd.toString();
-
-                graspRpc.write(cmd, reply);
-
-                yInfo()<<"Received solution: "<<reply.toString();
-
-                names.clear();
-
-                if (hand_for_computation!="both")
-                {
-                    getPose(reply, "pose", hand_for_computation, poses);
-                    getPose(reply, "solution", hand_for_computation,  hands);
-                    getCost(reply, "cost", hand_for_computation, costs);
-                    getCost(reply, "hand_length", hand_for_computation, dims);
-                }
-                else
-                {
-                    getPose(reply, "pose", "right",poses);
-                    getPose(reply, "solution", "right", hands);
-                    getCost(reply, "cost", "right", costs);
-                    getCost(reply, "hand_length", "right", dims);
-                    getPose(reply, "pose", "left", poses);
-                    getPose(reply, "solution", "left", hands);
-                    getCost(reply, "cost", "left", costs);
-                    getCost(reply, "hand_length", "left", dims);
-                }
-            }
-
-            /*vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
-            vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
-            vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
-            vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
-
-            vtk_renderWindow->SetSize(600,600);
-            vtk_renderWindow->AddRenderer(vtk_renderer);
-
-            vtk_renderer->AddActor(vtk_all_points->get_actor());
-            vtk_renderer->AddActor(vtk_out_points->get_actor());
-            if (dwn_points.size()!=in_points.size())
-                vtk_renderer->AddActor(vtk_dwn_points->get_actor());
-
-            vtk_renderer->SetBackground(backgroundColor.data());
-
-            vtk_axes=vtkSmartPointer<vtkAxesActor>::New();
-            vtk_widget=vtkSmartPointer<vtkOrientationMarkerWidget>::New();
-            vtk_widget->SetOutlineColor(0.9300,0.5700,0.1300);
-            vtk_widget->SetOrientationMarker(vtk_axes);
-            vtk_widget->SetInteractor(vtk_renderWindowInteractor);
-            vtk_widget->SetViewport(0.0,0.0,0.2,0.2);
-            vtk_widget->SetEnabled(1);
-            vtk_widget->InteractiveOn();
-
-            vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
-            vtk_style->SetCurrentStyleToTrackballCamera();
-            vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);*/
-
-            //  grasping pose candidates
-            vector<shared_ptr<GraspPose>> pose_candidates;
-
-            //  grasp pose actors (temporary fix)
-            vector<vtkSmartPointer<vtkAxesActor>> pose_actors;
-            vector<vtkSmartPointer<vtkCaptionActor2D>> pose_captions;
-
-            for (size_t i=0; i< v.size(); i++)
-            {
-                r.resize(12,0.0);
-                r.setSubvector(0, v[i].subVector(5,7));
-                r.setSubvector(3, v[i].subVector(8,11));
-                r.setSubvector(7, v[i].subVector(0,2));
-                r.setSubvector(10, v[i].subVector(3,4));
-
-                vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(r));
-
-                vtk_renderer->AddActor(vtk_superquadric->get_actor());
-
-                vector<double> bounds(6),centroid(3);
-                vtk_all_points->get_polydata()->GetBounds(bounds.data());
-                for (size_t i=0; i<centroid.size(); i++)
-                    centroid[i]=0.5*(bounds[i<<1]+bounds[(i<<1)+1]);
-
-                vtk_camera=vtkSmartPointer<vtkCamera>::New();
-                vtk_camera->SetPosition(centroid[0]+1.0,centroid[1],centroid[2]+0.5);
-                vtk_camera->SetFocalPoint(centroid.data());
-                vtk_camera->SetViewUp(0.0,0.0,1.0);
-                vtk_renderer->SetActiveCamera(vtk_camera);
-            }
-
-            vtk_renderer->AddActor(vtk_plane->get_actor());
-
-
-            for (size_t i=0; i< poses.size();i++)
-            {
-                points_hand.clear();
-
-                yDebug()<<"Pose "<<i<< " "<<poses[i].toString();
-                yDebug()<<"Cost "<<i<< " "<<costs[i];
-                yDebug()<<"Name "<<i<< " "<<names[i];
-                vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
-                vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
-                ax_actor->VisibilityOff();
-                cap_actor->VisibilityOff();
-                pose_actors.push_back(ax_actor);
-                pose_captions.push_back(cap_actor);
-                vtk_renderer->AddActor(pose_actors[i]);
-                vtk_renderer->AddActor(pose_captions[i]);
-
-                shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
-
-                candidate_pose->setvtkTransform(poses[i]);
-                candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
-                pose_actors[i]->SetUserTransform(candidate_pose->pose_vtk_transform);
-
-                candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[i]);
-                pose_actors[i]->AxisLabelsOff();
-                pose_actors[i]->SetTotalLength(0.02, 0.02, 0.02);
-                pose_actors[i]->VisibilityOn();
-
-                pose_captions[i]->VisibilityOn();
-                pose_captions[i]->GetTextActor()->SetTextScaleModeToNone();
-
-
-
-                stringstream ss;
-                if (hand_for_computation!="both")
-                    ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost: "<<costs[i];
-                else
-                {
-                   ss<<"pose_"<<i%num_superq<<"_"+names[i]+" / cost: "<<setprecision(3)<<costs[i];
-                }
-
-                candidate_pose->setvtkActorCaption(ss.str());
-                pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
-                pose_captions[i]->BorderOff();
-                pose_captions[i]->LeaderOn();
-                pose_captions[i]->GetCaptionTextProperty()->SetFontSize(15);
-                pose_captions[i]->GetCaptionTextProperty()->FrameOff();
-                pose_captions[i]->GetCaptionTextProperty()->ShadowOff();
-                pose_captions[i]->GetCaptionTextProperty()->BoldOff();
-                pose_captions[i]->GetCaptionTextProperty()->ItalicOff();
-                pose_captions[i]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
-                pose_captions[i]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
-
-                if (rf.check("visualize_hand"))
-                {
-                    Vector pose_hand(12,0.0);
-                    pose_hand.setSubvector(0,hands[i].subVector(0,2));
-                    pose_hand.setSubvector(3, dcm2axis(euler2dcm(hands[i].subVector(3,5))));
-                    // Hand dimensions
-                    pose_hand[7]=0.03;
-                    pose_hand[8]=dims[i];
-                    pose_hand[9]=0.03;
-                    pose_hand[10]=pose_hand[11]=1.0;
-
-                    samplePointsHand(pose_hand, points_hand, names[i]);
-
-                    vtk_points_hand=unique_ptr<Points>(new Points(points_hand,8));
-
-                    vtk_renderer->AddActor(vtk_points_hand->get_actor());
-
-                    vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(pose_hand));
-
-                    vtk_renderer->AddActor(vtk_superquadric->get_actor());
-                }
-
-                pose_candidates.push_back(candidate_pose);
-            }
-
+            computeAndVisualizeSuperqAndGrasp();
         }
 
         if (viewer_enabled)
@@ -1089,7 +899,7 @@ class Visualizer : public RFModule
     }
 
     /****************************************************************/
-    void process(const PointCloud<DataXYZRGBA> &points, Bottle &reply)
+   /* void process(const PointCloud<DataXYZRGBA> &points, Bottle &reply)
     {   
         reply.clear();
         if (points.size()>0)
@@ -1171,12 +981,201 @@ class Visualizer : public RFModule
 
             reply.read(r);
         }
+    }*/
+
+    /****************************************************************/
+    bool computeAndVisualizeSuperqAndGrasp()
+    {
+        Bottle cmd, superq_b, reply;
+        cmd.addString("send_point_clouds");
+
+        Bottle &in1=cmd.addList();
+
+        for (size_t i=0; i<dwn_points.size(); i++)
+        {
+            Bottle &in=in1.addList();
+            in.addDouble(dwn_points[i][0]);
+            in.addDouble(dwn_points[i][1]);
+            in.addDouble(dwn_points[i][2]);
+            in.addDouble(dwn_points[i][3]);
+            in.addDouble(dwn_points[i][4]);
+            in.addDouble(dwn_points[i][5]);
+        }
+
+        superqRpc.write(cmd, superq_b);
+
+        cmd.clear();
+        cmd.addString("get_superq");
+
+        superqRpc.write(cmd, superq_b);
+
+        Vector r;
+        vector<Vector> v=getBottle(superq_b);
+
+        num_superq=v.size();
+
+        if (get_grasping_pose)
+        {
+            if (v.size()==1)
+            {
+                askOnePose(v, cmd);
+            }
+            else
+            {
+                askMultiplePose(v,cmd);
+            }
+
+            yInfo()<<"Command asked "<<cmd.toString();
+
+            graspRpc.write(cmd, reply);
+
+            yInfo()<<"Received solution: "<<reply.toString();
+
+            names.clear();
+            poses.clear();
+            hands.clear();
+            costs.clear();
+            dims.clear();
+
+            if (hand_for_computation!="both")
+            {
+                getPose(reply, "pose", hand_for_computation, poses);
+                getPose(reply, "solution", hand_for_computation,  hands);
+                getCost(reply, "cost", hand_for_computation, costs);
+                getCost(reply, "hand_length", hand_for_computation, dims);
+            }
+            else
+            {
+                getPose(reply, "pose", "right",poses);
+                getPose(reply, "solution", "right", hands);
+                getCost(reply, "cost", "right", costs);
+                getCost(reply, "hand_length", "right", dims);
+                getPose(reply, "pose", "left", poses);
+                getPose(reply, "solution", "left", hands);
+                getCost(reply, "cost", "left", costs);
+                getCost(reply, "hand_length", "left", dims);
+            }
+        }
+
+        //  grasping pose candidates
+        vector<shared_ptr<GraspPose>> pose_candidates;
+
+        //  grasp pose actors (temporary fix)
+        vector<vtkSmartPointer<vtkAxesActor>> pose_actors;
+        vector<vtkSmartPointer<vtkCaptionActor2D>> pose_captions;
+
+        for (size_t i=0; i< v.size(); i++)
+        {
+            r.resize(12,0.0);
+            r.setSubvector(0, v[i].subVector(5,7));
+            r.setSubvector(3, v[i].subVector(8,11));
+            r.setSubvector(7, v[i].subVector(0,2));
+            r.setSubvector(10, v[i].subVector(3,4));
+
+            vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(r));
+
+            vtk_renderer->AddActor(vtk_superquadric->get_actor());
+
+            vector<double> bounds(6),centroid(3);
+            vtk_all_points->get_polydata()->GetBounds(bounds.data());
+            for (size_t i=0; i<centroid.size(); i++)
+                centroid[i]=0.5*(bounds[i<<1]+bounds[(i<<1)+1]);
+
+            vtk_camera=vtkSmartPointer<vtkCamera>::New();
+            vtk_camera->SetPosition(centroid[0]+1.0,centroid[1],centroid[2]+0.5);
+            vtk_camera->SetFocalPoint(centroid.data());
+            vtk_camera->SetViewUp(0.0,0.0,1.0);
+            vtk_renderer->SetActiveCamera(vtk_camera);
+        }
+
+        if (poses.size()> 0)
+            vtk_renderer->AddActor(vtk_plane->get_actor());
+
+
+        for (size_t i=0; i< poses.size();i++)
+        {
+            points_hand.clear();
+
+            yDebug()<<"Pose "<<i<< " "<<poses[i].toString();
+            yDebug()<<"Cost "<<i<< " "<<costs[i];
+            yDebug()<<"Name "<<i<< " "<<names[i];
+            vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
+            vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
+            ax_actor->VisibilityOff();
+            cap_actor->VisibilityOff();
+            pose_actors.push_back(ax_actor);
+            pose_captions.push_back(cap_actor);
+            vtk_renderer->AddActor(pose_actors[i]);
+            vtk_renderer->AddActor(pose_captions[i]);
+
+            shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
+
+            candidate_pose->setvtkTransform(poses[i]);
+            candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
+            pose_actors[i]->SetUserTransform(candidate_pose->pose_vtk_transform);
+
+            candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[i]);
+            pose_actors[i]->AxisLabelsOff();
+            pose_actors[i]->SetTotalLength(0.02, 0.02, 0.02);
+            pose_actors[i]->VisibilityOn();
+
+            pose_captions[i]->VisibilityOn();
+            pose_captions[i]->GetTextActor()->SetTextScaleModeToNone();
+
+
+
+            stringstream ss;
+            if (hand_for_computation!="both")
+                ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost: "<<costs[i];
+            else
+            {
+               ss<<"pose_"<<i%num_superq<<"_"+names[i]+" / cost: "<<setprecision(3)<<costs[i];
+            }
+
+            candidate_pose->setvtkActorCaption(ss.str());
+            pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
+            pose_captions[i]->BorderOff();
+            pose_captions[i]->LeaderOn();
+            pose_captions[i]->GetCaptionTextProperty()->SetFontSize(15);
+            pose_captions[i]->GetCaptionTextProperty()->FrameOff();
+            pose_captions[i]->GetCaptionTextProperty()->ShadowOff();
+            pose_captions[i]->GetCaptionTextProperty()->BoldOff();
+            pose_captions[i]->GetCaptionTextProperty()->ItalicOff();
+            pose_captions[i]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
+            pose_captions[i]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
+
+            if ("visualize_hand")
+            {
+                Vector pose_hand(12,0.0);
+                pose_hand.setSubvector(0,hands[i].subVector(0,2));
+                pose_hand.setSubvector(3, dcm2axis(euler2dcm(hands[i].subVector(3,5))));
+                // Hand dimensions
+                pose_hand[7]=0.03;
+                pose_hand[8]=dims[i];
+                pose_hand[9]=0.03;
+                pose_hand[10]=pose_hand[11]=1.0;
+
+                samplePointsHand(pose_hand, points_hand, names[i]);
+
+                vtk_points_hand=unique_ptr<Points>(new Points(points_hand,8));
+
+                vtk_renderer->AddActor(vtk_points_hand->get_actor());
+
+                vtk_superquadric=unique_ptr<Superquadric>(new Superquadric(pose_hand));
+
+                vtk_renderer->AddActor(vtk_superquadric->get_actor());
+            }
+
+            pose_candidates.push_back(candidate_pose);
+        }
     }
 
     /****************************************************************/
     bool respond(const Bottle &command, Bottle &reply) override
     {
         LockGuard lg(mutex);
+
+        string object;
 
         bool ok=false;
         if (command.check("remove-outliers"))
@@ -1198,27 +1197,167 @@ class Visualizer : public RFModule
             ok=true;
         }
 
+        if (command.get(0).toString()=="compute-superq")
+        {
+            if (command.size()==3)
+            {
+                object=command.get(2).toString();
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            PointCloud<DataXYZRGBA> pc;
+
+            if (acquirePointCloud(pc, object))
+            {
+                if (pc.size()>0)
+                {
+                    LockGuard lg(mutex);
+
+                    all_points.clear();
+                    all_colors.clear();
+                    in_points.clear();
+                    out_points.clear();
+                    dwn_points.clear();
+
+                    Vector p(3);
+                    vector<unsigned char> c(3);
+                    for (int i=0; i<pc.size(); i++)
+                    {
+                        p[0]=pc(i).x;
+                        p[1]=pc(i).y;
+                        p[2]=pc(i).z;
+                        c[0]=pc(i).r;
+                        c[1]=pc(i).g;
+                        c[2]=pc(i).b;
+                        all_points.push_back(p);
+                        all_colors.push_back(c);
+                    }
+
+                    removeOutliers();
+                    sampleInliers();
+
+                    vtk_all_points->set_points(all_points);
+                    vtk_all_points->set_colors(all_colors);
+                    vtk_out_points->set_points(out_points);
+                    vtk_dwn_points->set_points(dwn_points);
+                }
+
+                computeAndVisualizeSuperqAndGrasp();
+            }
+        }
+
+
         reply.addVocab(Vocab::encode(ok?"ack":"nack"));
         return true;
+    }
+
+    /****************************************************************/
+    bool acquirePointCloud(PointCloud<DataXYZRGBA> &point_cloud, const string &object)
+    {
+        //  query point-cloud-read via rpc for the point cloud
+        //  command: get_point_cloud objectName
+        //  put point cloud into container, return true if operation was ok
+        //  or call refreshpointcloud
+        Bottle cmd_request;
+        Bottle cmd_reply;
+
+        cmd_request.addString("look");
+        cmd_request.addString(object);
+        cmd_request.addString("wait");
+
+        action_render_rpc.write(cmd_request, cmd_reply);
+        if (cmd_reply.toString() != "[ack]")
+        {
+            yError() << "Didn't manage to look at the object";
+            return false;
+        }
+
+        point_cloud.clear();
+        cmd_request.clear();
+        cmd_reply.clear();
+
+        cmd_request.addString("get_point_cloud");
+        cmd_request.addString(object);
+
+        point_cloud_rpc.write(cmd_request, cmd_reply);
+
+        //  cheap workaround to get the point cloud
+        Bottle* pcBt = cmd_reply.get(0).asList();
+        bool success = point_cloud.fromBottle(*pcBt);
+
+        if (success && (point_cloud.size() > 0))
+        {
+            yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+            refreshPointCloud(point_cloud);
+            return true;
+        }
+        else
+        {
+            yError() << "Point cloud null or empty";
+            return false;
+        }
+
+    }
+
+    /****************************************************************/
+    void refreshPointCloud(const PointCloud<DataXYZRGBA> &points)
+    {
+       if (points.size() > 0)
+       {
+           LockGuard lg(mutex);
+
+           //   set the vtk point cloud object with the read data
+           //vtk_all_points->set_points(points);
+           //vtk_all_points->set_colors(points);
+
+           //   position the camera to look at point cloud
+           vector<double> bounds(6), centroid(3);
+           vtk_all_points->get_polydata()->GetBounds(bounds.data());
+
+           double bb = 0.0;
+           for (size_t i=0; i<centroid.size(); i++)
+           {
+               centroid[i] = 0.5 * (bounds[i<<1] + bounds[(i<<1)+1]);
+               bb = std::max(bb, bounds[(i<<1)+1] - bounds[i<<1]);
+           }
+           bb *= 3.0;
+
+           vtk_camera->SetPosition(centroid[0] + bb, centroid[1], centroid[2] + bb);
+           vtk_camera->SetViewUp(0.0, 0.0, 1.0);
+           vtk_camera->SetFocalPoint(centroid.data());
+       }
     }
 
     /****************************************************************/
     bool interruptModule() override
     {
         closing=true;
+        if (!from_file)
+        {
+            action_render_rpc.interrupt();
+            point_cloud_rpc.interrupt();
+        }
         return true;
+
     }
 
     /****************************************************************/
     bool close() override
     {
-        yDebug()<<__LINE__;
         if (!from_file)
         {
             if (rpcPoints.asPort().isOpen())
                 rpcPoints.close();
             if (rpcService.asPort().isOpen())
                 rpcService.close();
+            if (action_render_rpc.asPort().isOpen())
+                action_render_rpc.close();
+            if (point_cloud_rpc.asPort().isOpen())
+                point_cloud_rpc.close();
         }
         return true;
     }
@@ -1302,7 +1441,7 @@ class Visualizer : public RFModule
 
 public:
     /****************************************************************/
-    Visualizer() : closing(false), pointsProcessor(this) { }
+    Visualizer() : closing(false) {} //, pointsProcessor(this) { }
 };
 
 
