@@ -739,10 +739,10 @@ class Visualizer : public RFModule
         }
         else
         {
-            rpcPoints.open("/find-superquadric/points:rpc");
+            rpcPoints.open("/superq-and-grasp-visualizer/points:rpc");
             rpcPoints.setReader(pointsProcessor);
 
-            rpcService.open("/find-superquadric/service:rpc");
+            rpcService.open("/superq-and-grasp-visualizer/service:rpc");
             attach(rpcService);
         }
 
@@ -762,7 +762,7 @@ class Visualizer : public RFModule
         }
         else
         {
-            superqRpc.open("/test-superquadric/rpc:i");
+            superqRpc.open("/superq-and-grasp-visualizer/rpc:i");
             if (!Network::connect(superqRpc.getName(),"/superquadric-model/rpc"))
             {
                 yError()<<"Unable to connect to superquadric-model rpc ";
@@ -816,6 +816,34 @@ class Visualizer : public RFModule
 
         vtk_plane=unique_ptr<Plane>(new Plane(-0.18));
 
+        /** Test **/
+        vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
+        vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
+        vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
+        vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
+
+        vtk_renderWindow->SetSize(600,600);
+        vtk_renderWindow->AddRenderer(vtk_renderer);
+
+        vtk_renderer->AddActor(vtk_all_points->get_actor());
+        vtk_renderer->AddActor(vtk_out_points->get_actor());
+        if (dwn_points.size()!=in_points.size())
+            vtk_renderer->AddActor(vtk_dwn_points->get_actor());
+
+        vtk_renderer->SetBackground(backgroundColor.data());
+
+        vtk_axes=vtkSmartPointer<vtkAxesActor>::New();
+        vtk_widget=vtkSmartPointer<vtkOrientationMarkerWidget>::New();
+        vtk_widget->SetOutlineColor(0.9300,0.5700,0.1300);
+        vtk_widget->SetOrientationMarker(vtk_axes);
+        vtk_widget->SetInteractor(vtk_renderWindowInteractor);
+        vtk_widget->SetViewport(0.0,0.0,0.2,0.2);
+        vtk_widget->SetEnabled(1);
+        vtk_widget->InteractiveOn();
+
+        vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
+        vtk_style->SetCurrentStyleToTrackballCamera();
+        vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);
 
         if (dwn_points.size()>0)
         {
@@ -892,7 +920,7 @@ class Visualizer : public RFModule
                 }
             }
 
-            vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
+            /*vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
             vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
             vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
             vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
@@ -918,7 +946,7 @@ class Visualizer : public RFModule
 
             vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
             vtk_style->SetCurrentStyleToTrackballCamera();
-            vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);
+            vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);*/
 
             //  grasping pose candidates
             vector<shared_ptr<GraspPose>> pose_candidates;
@@ -1042,6 +1070,7 @@ class Visualizer : public RFModule
             vtk_updateCallback->set_closing(closing);
             vtk_renderWindowInteractor->AddObserver(vtkCommand::TimerEvent,vtk_updateCallback);
             vtk_renderWindowInteractor->Start();
+
         }
 
         return true;
@@ -1183,10 +1212,14 @@ class Visualizer : public RFModule
     /****************************************************************/
     bool close() override
     {
-        if (rpcPoints.asPort().isOpen())
-            rpcPoints.close();
-        if (rpcService.asPort().isOpen())
-            rpcService.close();
+        yDebug()<<__LINE__;
+        if (!from_file)
+        {
+            if (rpcPoints.asPort().isOpen())
+                rpcPoints.close();
+            if (rpcService.asPort().isOpen())
+                rpcService.close();
+        }
         return true;
     }
 
@@ -1198,13 +1231,13 @@ class Visualizer : public RFModule
 
         Vector point(3,0.0);
 
-        for(int i=0; i<(int)sqrt(49); i++)
+        for(int i=0; i<(int)sqrt(36); i++)
         {
-            for (double theta=0; theta<=2*M_PI; theta+=M_PI/((int)sqrt(49)))
+            for (double theta=0; theta<=2*M_PI; theta+=M_PI/((int)sqrt(36)))
             {
                 if (str_hand=="right")
                 {
-                    omega=i*M_PI/sqrt(49);
+                    omega=i*M_PI/sqrt(36);
 
                     ce=cos(theta);
                     se=sin(theta);
@@ -1217,7 +1250,7 @@ class Visualizer : public RFModule
                 }
                 else
                 {
-                    omega=i*M_PI/sqrt(49);
+                    omega=i*M_PI/sqrt(36);
 
                     ce=cos(theta);
                     se=sin(theta);
@@ -1263,7 +1296,8 @@ class Visualizer : public RFModule
             }
         }
 
-        yDebug()<<"points on hand "<<points.size();
+        //for (size_t i=0; i<points.size(); i++)
+        yDebug()<<"Points on hand"<<points.size();
     }
 
 public:
