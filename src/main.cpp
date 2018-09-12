@@ -53,6 +53,8 @@
 #include <vtkTextActor.h>
 #include <vtkTextProperty.h>
 #include <vtkPlaneSource.h>
+#include <vtkPNGWriter.h>
+#include <vtkWindowToImageFilter.h>
 
 
 using namespace std;
@@ -92,9 +94,11 @@ public:
                  void *vtkNotUsed(callData))
     {
         LockGuard lg(mutex);
+
         vtkRenderWindowInteractor* iren=static_cast<vtkRenderWindowInteractor*>(caller);
         if (closing!=nullptr)
         {
+            yDebug()<<"closing "<<*closing;
             if (*closing)
             {
                 iren->GetRenderWindow()->Finalize();
@@ -363,6 +367,10 @@ class Visualizer : public RFModule
     vector<Vector> poses, hands;
     vector<double> costs;
     vector<double> dims;
+
+    string object;
+    int number;
+    bool saving_screenshot;
 
     /*class PointsProcessor : public PortReader {
         Visualizer *visualizer;
@@ -721,6 +729,10 @@ class Visualizer : public RFModule
         from_file=rf.check("file");
         get_grasping_pose=rf.check("get_grasping_pose");
         visualize_hand=rf.check("visualize_hand");
+        object=rf.find("object").asString();
+        number=rf.find("number").asInt();
+
+        saving_screenshot=(rf.check("object") && rf.check("number"));
 
         if (from_file)
         {
@@ -812,7 +824,7 @@ class Visualizer : public RFModule
         random_sample=rf.check("random-sample",Value(1.0)).asDouble();
         viewer_enabled=!rf.check("disable-viewer");
 
-        vector<double> backgroundColor={0.7,0.7,0.7};
+        vector<double> backgroundColor={0.9,0.9,0.9};
         if (rf.check("background-color"))
         {
             if (const Bottle *ptr=rf.find("background-color").asList())
@@ -877,9 +889,35 @@ class Visualizer : public RFModule
             vtk_renderWindowInteractor->CreateRepeatingTimer(10);
 
             vtk_updateCallback=vtkSmartPointer<UpdateCommand>::New();
+
             vtk_updateCallback->set_closing(closing);
             vtk_renderWindowInteractor->AddObserver(vtkCommand::TimerEvent,vtk_updateCallback);
+
             vtk_renderWindowInteractor->Start();
+
+            if (saving_screenshot)
+            {
+                vtkSmartPointer<vtkWindowToImageFilter> windowToImageFilter =
+                vtkSmartPointer<vtkWindowToImageFilter>::New();
+                windowToImageFilter->SetInput(vtk_renderWindow);
+                windowToImageFilter->SetScale(1); //set the resolution of the output image (3 times the current resolution of vtk render window)
+                //windowToImageFilter->SetInputBufferTypeToRGBA(); //also record the alpha (transparency) channel
+                windowToImageFilter->ReadFrontBufferOff(); // read from the back buffer
+                windowToImageFilter->Update();
+
+
+                vtkSmartPointer<vtkPNGWriter> writer =
+                vtkSmartPointer<vtkPNGWriter>::New();
+
+
+                stringstream ss;
+                ss << number;
+                string number_str=ss.str();
+
+                writer->SetFileName((object+"_screenshot_no_"+number_str+".png").c_str());
+                writer->SetInputConnection(windowToImageFilter->GetOutputPort());
+                writer->Write();
+            }
 
         }
 
