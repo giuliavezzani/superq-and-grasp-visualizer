@@ -852,6 +852,7 @@ class Visualizer : public RFModule
         /** Test **/
         vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
         vtk_renderWindow=vtkSmartPointer<vtkRenderWindow>::New();
+
         vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
         vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
 
@@ -888,15 +889,20 @@ class Visualizer : public RFModule
             vtk_renderWindowInteractor->Initialize();
             vtk_renderWindowInteractor->CreateRepeatingTimer(10);
 
-            vtk_updateCallback=vtkSmartPointer<UpdateCommand>::New();
+            if (!saving_screenshot)
+            {
+                vtk_updateCallback=vtkSmartPointer<UpdateCommand>::New();
 
-            vtk_updateCallback->set_closing(closing);
-            vtk_renderWindowInteractor->AddObserver(vtkCommand::TimerEvent,vtk_updateCallback);
+                vtk_updateCallback->set_closing(closing);
+                vtk_renderWindowInteractor->AddObserver(vtkCommand::TimerEvent,vtk_updateCallback);
 
-            vtk_renderWindowInteractor->Start();
+                vtk_renderWindowInteractor->Start();
+            }
 
             if (saving_screenshot)
             {
+                vtk_renderWindowInteractor->Render();
+
                 vtkSmartPointer<vtkWindowToImageFilter> windowToImageFilter =
                 vtkSmartPointer<vtkWindowToImageFilter>::New();
                 windowToImageFilter->SetInput(vtk_renderWindow);
@@ -917,6 +923,10 @@ class Visualizer : public RFModule
                 writer->SetFileName((object+"_screenshot_no_"+number_str+".png").c_str());
                 writer->SetInputConnection(windowToImageFilter->GetOutputPort());
                 writer->Write();
+
+                vtk_renderWindowInteractor->GetRenderWindow()->Finalize();
+                vtk_renderWindowInteractor->TerminateApp();
+
             }
 
         }
