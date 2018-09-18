@@ -23,6 +23,11 @@ endif()
 find_package(YARP REQUIRED)
 find_package(ICUB REQUIRED)
 list(APPEND CMAKE_MODULE_PATH ${ICUB_MODULE_PATH})
+find_package(ICUBcontrib)
+list(APPEND CMAKE_MODULE_PATH ${ICUBCONTRIB_MODULE_PATH})
+include(ICUBcontribHelpers)
+include(ICUBcontribOptions)
+icubcontrib_set_default_prefix()
 
 find_package(IPOPT REQUIRED)
 find_package(VTK REQUIRED)
@@ -37,4 +42,10 @@ set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS " ${IPOPT_
 target_link_libraries(${PROJECT_NAME} ${YARP_LIBRARIES} ${IPOPT_LIBRARIES} ${VTK_LIBRARIES} ctrlLib)
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+icubcontrib_add_uninstall_target()
+
+# app and conf
+file(GLOB scripts ${CMAKE_CURRENT_SOURCE_DIR}/app/scripts/*.template)
+yarp_install(FILES ${scripts} DESTINATION ${ICUBCONTRIB_APPLICATIONS_TEMPLATES_INSTALL_DIR})
+
 

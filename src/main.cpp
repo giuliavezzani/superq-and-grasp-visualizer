@@ -98,7 +98,6 @@ public:
         vtkRenderWindowInteractor* iren=static_cast<vtkRenderWindowInteractor*>(caller);
         if (closing!=nullptr)
         {
-            yDebug()<<"closing "<<*closing;
             if (*closing)
             {
                 iren->GetRenderWindow()->Finalize();
@@ -859,10 +858,10 @@ class Visualizer : public RFModule
         vtk_renderWindow->SetSize(600,600);
         vtk_renderWindow->AddRenderer(vtk_renderer);
 
-        vtk_renderer->AddActor(vtk_all_points->get_actor());
+        /*vtk_renderer->AddActor(vtk_all_points->get_actor());
         vtk_renderer->AddActor(vtk_out_points->get_actor());
         if (dwn_points.size()!=in_points.size())
-            vtk_renderer->AddActor(vtk_dwn_points->get_actor());
+            vtk_renderer->AddActor(vtk_dwn_points->get_actor());*/
 
         vtk_renderer->SetBackground(backgroundColor.data());
 
@@ -1283,9 +1282,9 @@ class Visualizer : public RFModule
 
         if (command.get(0).toString()=="compute-superq")
         {
-            if (command.size()==3)
+            if (command.size()==2)
             {
-                object=command.get(2).toString();
+                object=command.get(1).toString();
             }
             else
             {
@@ -1293,13 +1292,17 @@ class Visualizer : public RFModule
                 return true;
             }
 
+
+
             PointCloud<DataXYZRGBA> pc;
 
             if (acquirePointCloud(pc, object))
             {
+
                 if (pc.size()>0)
                 {
-                    LockGuard lg(mutex);
+
+                    //LockGuard lg(mutex);
 
                     all_points.clear();
                     all_colors.clear();
@@ -1321,13 +1324,24 @@ class Visualizer : public RFModule
                         all_colors.push_back(c);
                     }
 
+
                     removeOutliers();
                     sampleInliers();
+
+                    vtk_renderer->RemoveAllViewProps();
+
+                    vtk_renderer->AddActor(vtk_all_points->get_actor());
+                    vtk_renderer->AddActor(vtk_out_points->get_actor());
+                    if (dwn_points.size()!=in_points.size())
+                        vtk_renderer->AddActor(vtk_dwn_points->get_actor());
+
 
                     vtk_all_points->set_points(all_points);
                     vtk_all_points->set_colors(all_colors);
                     vtk_out_points->set_points(out_points);
                     vtk_dwn_points->set_points(dwn_points);
+
+                     yDebug()<<__LINE__;
                 }
 
                 computeAndVisualizeSuperqAndGrasp();
@@ -1349,16 +1363,18 @@ class Visualizer : public RFModule
         Bottle cmd_request;
         Bottle cmd_reply;
 
-        cmd_request.addString("look");
+        /*cmd_request.addString("look");
         cmd_request.addString(object);
         cmd_request.addString("wait");
+
+        yDebug()<<"cmd request "<<cmd_request.toString();
 
         action_render_rpc.write(cmd_request, cmd_reply);
         if (cmd_reply.toString() != "[ack]")
         {
             yError() << "Didn't manage to look at the object";
             return false;
-        }
+        }*/
 
         point_cloud.clear();
         cmd_request.clear();
@@ -1370,20 +1386,30 @@ class Visualizer : public RFModule
         point_cloud_rpc.write(cmd_request, cmd_reply);
 
         //  cheap workaround to get the point cloud
-        Bottle* pcBt = cmd_reply.get(0).asList();
-        bool success = point_cloud.fromBottle(*pcBt);
-
-        if (success && (point_cloud.size() > 0))
+        if (cmd_reply.get(0).asList()!=NULL)
         {
-            yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
-            refreshPointCloud(point_cloud);
-            return true;
+            Bottle* pcBt = cmd_reply.get(0).asList();
+            bool success = point_cloud.fromBottle(*pcBt);
+
+            if (success && (point_cloud.size() > 0))
+            {
+                yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+                //refreshPointCloud(point_cloud);
+                return true;
+            }
+            else
+            {
+                yError() << "Point cloud null or empty";
+                return false;
+            }
         }
         else
         {
-            yError() << "Point cloud null or empty";
+
+            yError() << "Error in reply from SFM";
             return false;
         }
+
 
     }
 
