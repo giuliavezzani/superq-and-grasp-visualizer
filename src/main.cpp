@@ -858,10 +858,10 @@ class Visualizer : public RFModule
         vtk_renderWindow->SetSize(600,600);
         vtk_renderWindow->AddRenderer(vtk_renderer);
 
-        vtk_renderer->AddActor(vtk_all_points->get_actor());
+        /*vtk_renderer->AddActor(vtk_all_points->get_actor());
         vtk_renderer->AddActor(vtk_out_points->get_actor());
         if (dwn_points.size()!=in_points.size())
-            vtk_renderer->AddActor(vtk_dwn_points->get_actor());
+            vtk_renderer->AddActor(vtk_dwn_points->get_actor());*/
 
         vtk_renderer->SetBackground(backgroundColor.data());
 
@@ -1292,6 +1292,8 @@ class Visualizer : public RFModule
                 return true;
             }
 
+
+
             PointCloud<DataXYZRGBA> pc;
 
             if (acquirePointCloud(pc, object))
@@ -1299,6 +1301,7 @@ class Visualizer : public RFModule
 
                 if (pc.size()>0)
                 {
+
                     //LockGuard lg(mutex);
 
                     all_points.clear();
@@ -1324,6 +1327,13 @@ class Visualizer : public RFModule
 
                     removeOutliers();
                     sampleInliers();
+
+                    vtk_renderer->RemoveAllViewProps();
+
+                    vtk_renderer->AddActor(vtk_all_points->get_actor());
+                    vtk_renderer->AddActor(vtk_out_points->get_actor());
+                    if (dwn_points.size()!=in_points.size())
+                        vtk_renderer->AddActor(vtk_dwn_points->get_actor());
 
 
                     vtk_all_points->set_points(all_points);
