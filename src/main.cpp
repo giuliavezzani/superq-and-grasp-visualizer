@@ -846,7 +846,7 @@ class Visualizer : public RFModule
         vtk_out_points->get_actor()->GetProperty()->SetColor(1.0,0.0,0.0);
         vtk_dwn_points->get_actor()->GetProperty()->SetColor(1.0,1.0,0.0);
 
-        vtk_plane=unique_ptr<Plane>(new Plane(-0.18));
+        vtk_plane=unique_ptr<Plane>(new Plane(-0.22));
 
         /** Test **/
         vtk_renderer=vtkSmartPointer<vtkRenderer>::New();
@@ -858,10 +858,10 @@ class Visualizer : public RFModule
         vtk_renderWindow->SetSize(600,600);
         vtk_renderWindow->AddRenderer(vtk_renderer);
 
-        /*vtk_renderer->AddActor(vtk_all_points->get_actor());
+        vtk_renderer->AddActor(vtk_all_points->get_actor());
         vtk_renderer->AddActor(vtk_out_points->get_actor());
         if (dwn_points.size()!=in_points.size())
-            vtk_renderer->AddActor(vtk_dwn_points->get_actor());*/
+            vtk_renderer->AddActor(vtk_dwn_points->get_actor());
 
         vtk_renderer->SetBackground(backgroundColor.data());
 
