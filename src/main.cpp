@@ -332,7 +332,7 @@ public:
     }
 
     /****************************************************************/
-    void setvtkActorCaption(const string &caption)
+    void setvtkActorCaption(const string &caption, double &offset)
     {
         pose_vtk_caption_actor->GetTextActor()->SetTextScaleModeToNone();
         pose_vtk_caption_actor->SetCaption(caption.c_str());
@@ -343,7 +343,7 @@ public:
         pose_vtk_caption_actor->GetCaptionTextProperty()->ShadowOff();
         pose_vtk_caption_actor->GetCaptionTextProperty()->BoldOff();
         pose_vtk_caption_actor->GetCaptionTextProperty()->ItalicOff();
-        pose_vtk_caption_actor->SetAttachmentPoint(pose(0,3), pose(1,3), pose(2,3));
+        pose_vtk_caption_actor->SetAttachmentPoint(pose(0,3), pose(1,3), pose(2,3)+offset);
     }
 
 };
@@ -1144,6 +1144,7 @@ class Visualizer : public RFModule
 
         int j=findMinCost();
 
+        double offset=0.0;
 
         for (size_t i=0; i< poses.size();i++)
         {
@@ -1183,7 +1184,9 @@ class Visualizer : public RFModule
                ss<<"pose_"<<i%num_superq<<"_"+names[i]+" / cost: "<<setprecision(3)<<costs[i];
             }
 
-            candidate_pose->setvtkActorCaption(ss.str());
+            offset += 0.01;
+
+            candidate_pose->setvtkActorCaption(ss.str(), offset);
             pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
             pose_captions[i]->BorderOff();
             pose_captions[i]->LeaderOn();
