@@ -1178,10 +1178,10 @@ class Visualizer : public RFModule
 
             stringstream ss;
             if (hand_for_computation!="both")
-                ss<<"pose_"<<i%num_superq<<"_"<<hand_for_computation<<"/ cost: "<<costs[i];
+                ss<<hand_for_computation<<"_"<<i%num_superq<<" : "<<setprecision(3)<<costs[i];
             else
             {
-               ss<<"pose_"<<i%num_superq<<"_"+names[i]+" / cost: "<<setprecision(3)<<costs[i];
+               ss<<names[i]<<"_"<<i%num_superq<<" : "<<setprecision(3)<<costs[i];
             }
 
             offset += 0.01;
@@ -1295,8 +1295,6 @@ class Visualizer : public RFModule
                 return true;
             }
 
-
-
             PointCloud<DataXYZRGBA> pc;
 
             if (acquirePointCloud(pc, object))
@@ -1304,9 +1302,6 @@ class Visualizer : public RFModule
 
                 if (pc.size()>0)
                 {
-
-                    //LockGuard lg(mutex);
-
                     all_points.clear();
                     all_colors.clear();
                     in_points.clear();
@@ -1327,7 +1322,6 @@ class Visualizer : public RFModule
                         all_colors.push_back(c);
                     }
 
-
                     removeOutliers();
                     sampleInliers();
 
@@ -1343,14 +1337,11 @@ class Visualizer : public RFModule
                     vtk_all_points->set_colors(all_colors);
                     vtk_out_points->set_points(out_points);
                     vtk_dwn_points->set_points(dwn_points);
-
-                     yDebug()<<__LINE__;
                 }
 
                 computeAndVisualizeSuperqAndGrasp();
             }
         }
-
 
         reply.addVocab(Vocab::encode(ok?"ack":"nack"));
         return true;
@@ -1413,7 +1404,6 @@ class Visualizer : public RFModule
             return false;
         }
 
-
     }
 
     /****************************************************************/
@@ -1422,10 +1412,6 @@ class Visualizer : public RFModule
        if (points.size() > 0)
        {
            LockGuard lg(mutex);
-
-           //   set the vtk point cloud object with the read data
-           //vtk_all_points->set_points(points);
-           //vtk_all_points->set_colors(points);
 
            //   position the camera to look at point cloud
            vector<double> bounds(6), centroid(3);
