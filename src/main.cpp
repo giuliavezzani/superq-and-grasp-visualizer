@@ -1337,9 +1337,17 @@ class Visualizer : public RFModule
                     vtk_all_points->set_colors(all_colors);
                     vtk_out_points->set_points(out_points);
                     vtk_dwn_points->set_points(dwn_points);
+
+                    computeAndVisualizeSuperqAndGrasp();
+
+                    ok=true;
+
+
                 }
 
-                computeAndVisualizeSuperqAndGrasp();
+                //computeAndVisualizeSuperqAndGrasp();
+
+                ok=false;
             }
         }
 
