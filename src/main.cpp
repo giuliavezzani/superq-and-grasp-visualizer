@@ -1299,7 +1299,6 @@ class Visualizer : public RFModule
 
             if (acquirePointCloud(pc, object))
             {
-
                 if (pc.size()>0)
                 {
                     all_points.clear();
@@ -1351,6 +1350,8 @@ class Visualizer : public RFModule
 
 
             }
+            else
+                ok=false;
         }
 
         reply.addVocab(Vocab::encode(ok?"ack":"nack"));
