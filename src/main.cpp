@@ -1344,10 +1344,12 @@ class Visualizer : public RFModule
 
 
                 }
+                else
+                    ok=false;
 
                 //computeAndVisualizeSuperqAndGrasp();
 
-                ok=false;
+
             }
         }
 
