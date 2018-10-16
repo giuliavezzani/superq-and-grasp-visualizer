@@ -360,6 +360,7 @@ class Visualizer : public RFModule
     bool visualize_hand;
     bool viewer_enabled;
     bool closing;
+    bool show_cost;
     string hand_for_computation;
     int num_superq;
     std::deque<std::string> names;
@@ -725,6 +726,7 @@ class Visualizer : public RFModule
     {
         Rand::init();
 
+        show_cost=rf.check("show_cost");
         from_file=rf.check("file");
         get_grasping_pose=rf.check("get_grasping_pose");
         visualize_hand=rf.check("visualize_hand");
@@ -832,7 +834,7 @@ class Visualizer : public RFModule
         random_sample=rf.check("random-sample",Value(1.0)).asDouble();
         viewer_enabled=!rf.check("disable-viewer");
 
-        vector<double> backgroundColor={0.9,0.9,0.9};
+        vector<double> backgroundColor={1.0,1.0,1.0};
         if (rf.check("background-color"))
         {
             if (const Bottle *ptr=rf.find("background-color").asList())
@@ -847,9 +849,9 @@ class Visualizer : public RFModule
         sampleInliers();
 
 
-        vtk_all_points=unique_ptr<Points>(new Points(all_points,2));
-        vtk_out_points=unique_ptr<Points>(new Points(out_points,4));
-        vtk_dwn_points=unique_ptr<Points>(new Points(dwn_points,1));
+        vtk_all_points=unique_ptr<Points>(new Points(all_points,4));
+        vtk_out_points=unique_ptr<Points>(new Points(out_points,6));
+        vtk_dwn_points=unique_ptr<Points>(new Points(dwn_points,4));
 
         vtk_all_points->set_colors(all_colors);
         vtk_out_points->get_actor()->GetProperty()->SetColor(1.0,0.0,0.0);
@@ -1141,7 +1143,7 @@ class Visualizer : public RFModule
                 centroid[i]=0.5*(bounds[i<<1]+bounds[(i<<1)+1]);
 
             vtk_camera=vtkSmartPointer<vtkCamera>::New();
-            vtk_camera->SetPosition(centroid[0]+1.0,centroid[1],centroid[2]+0.5);
+            vtk_camera->SetPosition(centroid[0]+0.5,centroid[1],centroid[2]+0.4);
             vtk_camera->SetFocalPoint(centroid.data());
             vtk_camera->SetViewUp(0.0,0.0,1.0);
             vtk_renderer->SetActiveCamera(vtk_camera);
@@ -1169,7 +1171,8 @@ class Visualizer : public RFModule
             pose_actors.push_back(ax_actor);
             pose_captions.push_back(cap_actor);
             vtk_renderer->AddActor(pose_actors[i]);
-            vtk_renderer->AddActor(pose_captions[i]);
+            if (show_cost)
+                vtk_renderer->AddActor(pose_captions[i]);
 
             shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
 
@@ -1180,6 +1183,7 @@ class Visualizer : public RFModule
             candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[i]);
             pose_actors[i]->AxisLabelsOff();
             pose_actors[i]->SetTotalLength(0.02, 0.02, 0.02);
+            pose_actors[i]->SetShaftTypeToCylinder();
             pose_actors[i]->VisibilityOn();
 
             pose_captions[i]->VisibilityOn();
