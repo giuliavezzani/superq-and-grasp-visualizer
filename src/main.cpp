@@ -756,10 +756,19 @@ class Visualizer : public RFModule
                 all_points.push_back(p);
 
                 fill(c_.begin(),c_.end(),120);
+
                 iss>>c_[0]>>c_[1]>>c_[2];
                 c[0]=(unsigned char)c_[0];
                 c[1]=(unsigned char)c_[1];
                 c[2]=(unsigned char)c_[2];
+
+                if (c[0]==c[1] && c[1]==c[2])
+                {
+                    c[0]=50;
+                    c[1]=100;
+                    c[2]=0;
+                }
+
                 all_colors.push_back(c);
             }
         }
