@@ -55,6 +55,7 @@
 #include <vtkPlaneSource.h>
 #include <vtkPNGWriter.h>
 #include <vtkWindowToImageFilter.h>
+#include <vtkLineSource.h>
 
 
 using namespace std;
@@ -216,6 +217,36 @@ public:
 
         vtk_actor = vtkSmartPointer<vtkActor>::New();
         vtk_actor->SetMapper(vtk_mapper);
+    }
+
+};
+
+/****************************************************************/
+class Line : public Object
+{
+protected:
+    vtkSmartPointer<vtkLineSource> line_source;
+    vtkSmartPointer<vtkPolyDataMapper> vtk_mapper;
+
+public:
+    /****************************************************************/
+    Line(double p0[], double p1[])
+    {
+        line_source = vtkSmartPointer<vtkLineSource>::New();
+        line_source->SetPoint1(p0);
+        line_source->SetPoint2(p1);
+        line_source->Update();
+
+        vtkPolyData* line = line_source->GetOutput();
+
+        // Create a mapper and actor
+        vtk_mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+        vtk_mapper->SetInputData(line);
+
+        vtk_actor = vtkSmartPointer<vtkActor>::New();
+        vtk_actor->SetMapper(vtk_mapper);
+        vtk_actor->GetProperty()->SetLineWidth(5);
+        vtk_actor->GetProperty()->SetColor(1,0,0);
     }
 
 };
@@ -396,6 +427,7 @@ class Visualizer : public RFModule
     unique_ptr<Points> vtk_all_points,vtk_out_points,vtk_dwn_points, vtk_points_hand;
     unique_ptr<Superquadric> vtk_superquadric;
     unique_ptr<Plane> vtk_plane;
+    unique_ptr<Line> vtk_line;
 
     vtkSmartPointer<vtkRenderer> vtk_renderer;
     vtkSmartPointer<vtkRenderWindow> vtk_renderWindow;
@@ -1075,6 +1107,30 @@ class Visualizer : public RFModule
 
         num_superq=v.size();
 
+        cmd.clear();
+        reply.clear();
+
+        cmd.addString("get_adjacency_matrix");
+
+        Bottle bmatrix;
+
+        superqRpc.write(cmd, bmatrix);
+
+        Bottle  *matrix=bmatrix.get(0).asList();
+
+        int num_superq=matrix->get(0).asInt();
+        Matrix adj_matrix(num_superq, num_superq);
+
+        for (size_t i=0; i<num_superq; i++)
+        {
+            for (size_t j=0; j<num_superq; j++)
+            {
+                adj_matrix(i,j)=matrix->get(2).asList()->get(j+i*num_superq).asDouble();
+            }
+        }
+
+        yDebug()<<"Matrix a "<<adj_matrix.toString();
+
         if (get_grasping_pose)
         {
             if (v.size()==1)
@@ -1147,7 +1203,28 @@ class Visualizer : public RFModule
             vtk_camera->SetFocalPoint(centroid.data());
             vtk_camera->SetViewUp(0.0,0.0,1.0);
             vtk_renderer->SetActiveCamera(vtk_camera);
+
+            double p0[]={v[i][5], v[i][6],v[i][7]};
+
+            int k;
+
+            for (int j=0; j<adj_matrix.cols(); j++)
+            {
+                if (adj_matrix(i,j)==1)
+                {
+                    k=j;
+                    break;
+                }
+                else
+                    k=i;
+            }
+            double p1[]={v[k][5], v[k][6],v[k][7]};
+
+            vtk_line=unique_ptr<Line>(new Line(p0, p1));
+
+            vtk_renderer->AddActor(vtk_line->get_actor());
         }
+
 
         if (poses.size()> 0)
             vtk_renderer->AddActor(vtk_plane->get_actor());
