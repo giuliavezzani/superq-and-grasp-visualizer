@@ -1118,7 +1118,7 @@ class Visualizer : public RFModule
 
         Bottle  *matrix=bmatrix.get(0).asList();
 
-        int num_superq=matrix->get(0).asInt();
+       // int num_superq=matrix->get(0).asInt();
         Matrix adj_matrix(num_superq, num_superq);
 
         for (size_t i=0; i<num_superq; i++)
