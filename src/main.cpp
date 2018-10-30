@@ -881,10 +881,18 @@ class Visualizer : public RFModule
         sampleInliers();
 
 
-        vtk_all_points=unique_ptr<Points>(new Points(all_points,4));
-        vtk_out_points=unique_ptr<Points>(new Points(out_points,6));
-        vtk_dwn_points=unique_ptr<Points>(new Points(dwn_points,4));
-
+        if (rf.check("get_grasping_pose"))
+        {
+            vtk_all_points=unique_ptr<Points>(new Points(all_points,2));
+            vtk_out_points=unique_ptr<Points>(new Points(out_points,2));
+            vtk_dwn_points=unique_ptr<Points>(new Points(dwn_points,2));
+        }
+        else
+        {
+            vtk_all_points=unique_ptr<Points>(new Points(all_points,4));
+            vtk_out_points=unique_ptr<Points>(new Points(out_points,6));
+            vtk_dwn_points=unique_ptr<Points>(new Points(dwn_points,4));
+        }
         vtk_all_points->set_colors(all_colors);
         vtk_out_points->get_actor()->GetProperty()->SetColor(1.0,0.0,0.0);
         vtk_dwn_points->get_actor()->GetProperty()->SetColor(1.0,1.0,0.0);
@@ -1274,7 +1282,7 @@ class Visualizer : public RFModule
                ss<<names[i]<<"_"<<i%num_superq<<" : "<<setprecision(3)<<costs[i];
             }
 
-            offset += 0.01;
+            //offset += 0.01;
 
             candidate_pose->setvtkActorCaption(ss.str(), offset);
             pose_captions[i]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
